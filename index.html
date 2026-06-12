@@ -820,16 +820,7 @@ function openTradingWS(wsUrl, accountId){
 
     wsTrading.onmessage=evt=>{
         const d=JSON.parse(evt.data);
-        /* Proposal → buy immédiat */
-        if(d.msg_type==='proposal'&&d.proposal){
-            wsTrading.send(JSON.stringify({
-                buy:   d.proposal.id,
-                price: d.proposal.ask_price,
-                req_id:2
-            }));
-        } else {
-            _handleTradingMessage(d);
-        }
+        _handleTradingMessage(d);
     };
 
     wsTrading.onclose=()=>{
@@ -852,6 +843,91 @@ function openTradingWS(wsUrl, accountId){
     };
 
     wsTrading.onerror=()=>wsTrading.close();
+}
+
+/* ════════════════════════════════════════════
+   HANDLER MESSAGES TRADING
+   — Gère proposal, buy, proposal_open_contract
+   — Comptage gains/pertes/P&L
+════════════════════════════════════════════ */
+function _handleTradingMessage(d){
+    if(!d || !d.msg_type) return;
+
+    /* ── Proposal reçu → exécuter le buy immédiatement ── */
+    if(d.msg_type==='proposal'){
+        if(d.error){
+            showFeedback('❌ Cotation refusée : '+d.error.message,'err');
+            return;
+        }
+        if(d.proposal){
+            wsTrading.send(JSON.stringify({
+                buy:   d.proposal.id,
+                price: d.proposal.ask_price,
+                req_id: (d.req_id||1) + 100
+            }));
+        }
+        return;
+    }
+
+    /* ── Buy confirmé ── */
+    if(d.msg_type==='buy'){
+        if(d.error){
+            const det=d.error.details?' ('+JSON.stringify(d.error.details)+')':'';
+            showFeedback('❌ '+d.error.message+det,'err');
+            return;
+        }
+        if(d.buy){
+            const b=d.buy;
+            statsTotal++;
+            openContracts[b.contract_id]={buy_price:parseFloat(b.buy_price)};
+            updateStatsDisplay();
+            showFeedback('✓ Contrat #'+b.contract_id+' | achat $'+parseFloat(b.buy_price).toFixed(2),'ok');
+            /* Souscrire au suivi du contrat pour connaître le résultat */
+            wsTrading.send(JSON.stringify({
+                proposal_open_contract: 1,
+                contract_id: b.contract_id,
+                subscribe: 1
+            }));
+        }
+        return;
+    }
+
+    /* ── Résultat du contrat (gain/perte) ── */
+    if(d.msg_type==='proposal_open_contract'){
+        if(d.error) return;
+        const poc=d.proposal_open_contract;
+        if(!poc) return;
+        const cid=poc.contract_id;
+        const isClosed = poc.status==='sold'
+                      || poc.status==='expired'
+                      || poc.is_expired===1
+                      || poc.is_settleable===1;
+        if(isClosed && !settledContracts.has(cid)){
+            settledContracts.add(cid);
+            const profit=parseFloat(poc.profit||0);
+            const netProfit=parseFloat(profit.toFixed(2));
+            if(netProfit>0)       statsWin++;
+            else if(netProfit<0)  statsLoss++;
+            statsPnl=parseFloat((statsPnl+netProfit).toFixed(2));
+            delete openContracts[cid];
+            updateStatsDisplay();
+            const sign=netProfit>=0?'+':'';
+            const payout=parseFloat(poc.sell_price||0).toFixed(2);
+            showFeedback(
+                (netProfit>=0?'✓ GAIN : ':'❌ PERTE : ')
+                +sign+netProfit.toFixed(2)+'$'
+                +'  |  payout: '+payout+'$'
+                +'  |  P&L total: '+(statsPnl>=0?'+':'')+statsPnl.toFixed(2)+'$',
+                netProfit>=0?'ok':'err'
+            );
+        }
+        return;
+    }
+
+    /* ── Erreur générique ── */
+    if(d.msg_type==='error'){
+        showFeedback('❌ '+d.error.message,'err');
+    }
 }
 
 /* ════ Sélection de compte (changement depuis UI) ════ */
