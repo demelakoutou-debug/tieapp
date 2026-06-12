@@ -785,7 +785,7 @@ function connectOAuth(token, loginid, allAccounts){    if(wsTrading){wsTrading._
                 const lid    =auth.loginid||loginid||'—';
                 const bal    =auth.balance!=null?' $'+parseFloat(auth.balance).toFixed(2):'';
                 const curr   =auth.currency||'USD';
-                const isDemo =/^(DOT|VRTC|VRW)/i.test(lid);
+                const isDemo =/^DOT/i.test(lid);   // DOT = Demo, ROT = Réel
                 const label  =isDemo?'🔴 DEMO':'🟢 RÉEL';
                 tradeAuthorized=true;
                 try{localStorage.setItem('deriv_account_id',lid);}catch(e){}
@@ -804,7 +804,7 @@ function connectOAuth(token, loginid, allAccounts){    if(wsTrading){wsTrading._
         } else if(d.msg_type==='balance'&&!d.error&&d.balance){
             const lid=d.balance.loginid||getSavedAccountId();
             const bal='$'+parseFloat(d.balance.balance).toFixed(2);
-            const isDemo=/^(DOT|VRTC|VRW)/i.test(lid);
+            const isDemo=/^DOT/i.test(lid);   // DOT = Demo, ROT = Réel
             setTokStatus((isDemo?'🔴 DEMO ':'🟢 RÉEL ')+lid+'  '+bal,isDemo?'var(--orange)':'var(--green)');
         } else {
             _handleTradingMessage(d);
@@ -1719,7 +1719,7 @@ window.onload = async () => {
             /* Flux legacy token1/acct1 */
             const accts = oauthResult.accounts;
             try{ localStorage.setItem('deriv_oauth_accounts', JSON.stringify(accts)); }catch(e){}
-            const real = accts.find(a=>/^(ROT|CR)/i.test(a.loginid));
+            const real = accts.find(a=>/^ROT/i.test(a.loginid));  // ROT = Réel, DOT = Démo
             const chosen = real || accts[0];
             connectOAuth(chosen.token, chosen.loginid, accts);
         }
