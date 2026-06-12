@@ -253,45 +253,6 @@
         .mk-matrix-cell.strong { color: var(--green); border-color: rgba(0,200,150,.3); }
         .mk-matrix-cell.weak   { color: var(--red);   border-color: rgba(255,77,106,.3); }
 
-
-        /* ── Markov Panel ── */
-        #markov-bar {
-            background: var(--surface);
-            border-bottom: 1px solid var(--border);
-            padding: 6px 16px;
-            display: flex; align-items: center; gap: 12px;
-            flex-shrink: 0; overflow-x: auto;
-        }
-        #markov-bar::-webkit-scrollbar { height: 0; }
-        .mk-section { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-        .mk-lbl { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; white-space: nowrap; }
-        .mk-val { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; }
-        .mk-sep { width: 1px; height: 22px; background: var(--border); flex-shrink: 0; }
-        .mk-input {
-            width: 68px; background: var(--bg); border: 1px solid var(--border2);
-            color: #fff; padding: 5px 8px; border-radius: 4px;
-            font-size: 13px; font-family: 'JetBrains Mono', monospace;
-            text-align: center; transition: border-color .2s;
-        }
-        .mk-input:focus { outline: none; border-color: var(--accent); }
-        .mk-signal {
-            display: flex; align-items: center; gap: 6px;
-            padding: 4px 14px; border-radius: 6px;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 13px; font-weight: 700;
-            border: 1px solid transparent; transition: all .3s;
-        }
-        .mk-signal.bull { background: rgba(0,200,150,.15); color: var(--green); border-color: rgba(0,200,150,.4); }
-        .mk-signal.bear { background: rgba(255,77,106,.15); color: var(--red);   border-color: rgba(255,77,106,.4); }
-        .mk-signal.neut { background: var(--surface2);      color: var(--muted); border-color: var(--border2); }
-        .mk-signal.hot  { box-shadow: 0 0 14px rgba(0,200,150,.35); }
-        .mk-conf-bar-track { width: 90px; height: 7px; background: var(--border2); border-radius: 4px; overflow: hidden; }
-        .mk-conf-bar-fill  { height: 100%; border-radius: 4px; transition: width .4s, background .4s; }
-        .mk-matrix-wrap { display: flex; gap: 4px; font-family: 'JetBrains Mono', monospace; font-size: 9px; flex-wrap: wrap; max-width: 260px; }
-        .mk-matrix-cell { background: var(--surface2); border: 1px solid var(--border); border-radius: 3px; padding: 2px 5px; white-space: nowrap; color: var(--muted); }
-        .mk-matrix-cell.strong { color: var(--green); border-color: rgba(0,200,150,.3); }
-        .mk-matrix-cell.weak   { color: var(--red);   border-color: rgba(255,77,106,.3); }
-
         /* ── Stats bar ── */
         #stats-bar {
             background: var(--surface);
@@ -392,6 +353,8 @@
 </head>
 <body>
 
+<!-- ═══ PAS DE MODAL — Connexion OAuth directe ═══ -->
+
 <!-- ═══ HEADER ═══ -->
 <header>
     <div class="logo"><div class="logo-dot"></div>DERIV LIVE</div>
@@ -442,12 +405,9 @@
     <div class="tf">
         <span class="tf-lbl">Compte Deriv</span>
         <div class="tf-row">
-            <button id="btn-connect" onclick="connectTrading()" style="padding:6px 14px;border-radius:5px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:11px;font-weight:700;cursor:pointer;transition:all .18s;font-family:Inter,sans-serif;white-space:nowrap;">🔐 Se connecter avec Deriv</button>
-            <button id="btn-disconnect" onclick="disconnectTrading()" style="display:none;padding:6px 12px;border-radius:5px;border:1px solid rgba(255,77,106,.4);background:rgba(255,77,106,.1);color:var(--red);font-size:11px;font-weight:700;cursor:pointer;font-family:Inter,sans-serif;">✕ Déconnecter</button>
+            <button id="btn-connect" onclick="startOAuthLogin()">🔐 Connexion Deriv</button>
+    <button id="btn-disconnect" onclick="disconnectTrading()" style="display:none;padding:5px 10px;border-radius:5px;border:1px solid var(--border2);background:var(--surface2);color:var(--red);font-size:11px;cursor:pointer;font-family:Inter,sans-serif;">✕ Déconnecter</button>
         </div>
-        <select id="account-select" onchange="switchAccount(this.value)"
-            style="display:none;margin-top:3px;background:var(--bg);border:1px solid var(--border2);color:var(--text);padding:4px 8px;border-radius:5px;font-size:11px;font-family:'JetBrains Mono',monospace;cursor:pointer;max-width:220px;">
-        </select>
         <span class="token-status" id="token-status" style="color:var(--muted)">Non connecté</span>
     </div>
     <div class="tbar-vdiv"></div>
@@ -503,7 +463,6 @@
     </div>
 </div>
 
-
 <!-- ═══ EXPECTED VALUE BAR ═══ -->
 <div id="ev-bar">
     <button id="ev-collapse-btn" onclick="toggleEVBar()" title="Réduire">▲</button>
@@ -525,7 +484,6 @@
     <span class="ev-mode-tag" id="ev-mode-tag">—</span>
     <span style="font-size:9px;color:var(--muted);max-width:260px;line-height:1.3;" id="ev-advice">—</span>
 </div>
-
 
 <!-- ═══ MARKOV CHAIN BAR ═══ -->
 <div id="markov-bar">
@@ -604,8 +562,6 @@
 <div id="tie-bar">
     <span class="tie-title">🎯 TIE PREDICTOR</span>
     <div class="tie-sep"></div>
-
-    <!-- 4 tick boxes -->
     <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
         <div class="tie-tick-box" id="tp-box-1">
             <span class="ttb-lbl">Tick +1</span>
@@ -628,15 +584,9 @@
             <div class="ttb-bar-track"><div class="ttb-bar-fill" id="tp-bar-4" style="width:0%"></div></div>
         </div>
     </div>
-
     <div class="tie-sep"></div>
-
-    <!-- Signal global -->
     <div id="tp-signal" class="tie-signal neut">— collecte…</div>
-
     <div class="tie-sep"></div>
-
-    <!-- Stats observées -->
     <div style="display:flex;flex-direction:column;gap:3px;flex-shrink:0;">
         <div style="display:flex;align-items:center;gap:6px;">
             <span class="tie-info-lbl">Ties observés</span>
@@ -647,18 +597,12 @@
             <span class="tie-info-val" id="tp-rate" style="color:var(--muted)">—</span>
         </div>
     </div>
-
     <div class="tie-sep"></div>
-
-    <!-- Pattern le plus fréquent avant tie -->
     <div style="display:flex;flex-direction:column;gap:3px;flex-shrink:0;">
         <span class="tie-info-lbl">Pattern → Tie le plus fréquent</span>
         <span class="tie-info-val" id="tp-best-pattern" style="color:var(--purple);font-size:12px;">—</span>
     </div>
-
     <div class="tie-sep"></div>
-
-    <!-- Contexte actuel -->
     <div style="display:flex;flex-direction:column;gap:3px;flex-shrink:0;">
         <span class="tie-info-lbl">Contexte actuel (4 ticks)</span>
         <span class="tie-info-val" id="tp-context" style="color:var(--accent);font-size:12px;">—</span>
@@ -699,16 +643,290 @@ let ticksData = { times:[], prices:[], highs:[], lows:[] };
 let showSAR=true, showFractal=true, showLevels=true, showST=true;
 let sessionHigh=null, sessionLow=null;
 let lastFractalPeaks = { up:[], down:[] };
-let tradeAuthorized = false;
 let durType = 't';
 let allowEqual = false;
 
+/* ─── Configuration OAuth2 PKCE Deriv ─── */
+const CLIENT_ID    = '33x2j6gNVVRZ7SA4iDxDv';
+const REDIRECT_URI = 'https://demelakoutou-debug.github.io/tieapp/';
+
 const TRADE_SYMBOL_MAP = {
-    'stpRNG':'STPRNG','stpRNG2':'STPRNG2','stpRNG3':'STPRNG3',
-    'stpRNG4':'STPRNG4','stpRNG5':'STPRNG5'
+    'stpRNG':'stpRNG','stpRNG2':'stpRNG2','stpRNG3':'stpRNG3',
+    'stpRNG4':'stpRNG4','stpRNG5':'stpRNG5'
 };
-function tradeSymbol(){ return TRADE_SYMBOL_MAP[currentSymbol]||currentSymbol.toUpperCase(); }
+function tradeSymbol(){ return TRADE_SYMBOL_MAP[currentSymbol]||currentSymbol; }
 const fmt1 = v => v != null ? v.toFixed(1) : '—';
+
+/* ════════════════════════════════════════════
+   TRADING — ARCHITECTURE PKCE + REST + OTP + WS
+   ─────────────────────────────────────────
+   1. PKCE → auth.deriv.com → code dans URL
+   2. Échange code → access_token (POST /oauth2/token)
+   3. GET /trading/v1/options/accounts → liste DOT/ROT
+   4. POST /accounts/{id}/otp → wsUrl authentifiée
+   5. WebSocket sur wsUrl → trades (proposal+buy)
+════════════════════════════════════════════ */
+
+let accessToken    = null;   // Bearer token OAuth
+let wsTrading      = null;   // WebSocket de trading
+let tradeAuthorized= false;
+
+let statsTotal=0, statsWin=0, statsLoss=0, statsPnl=0.0;
+let openContracts={};
+let settledContracts=new Set();
+
+function updateStatsDisplay(){
+    document.getElementById('st-trades').innerText=statsTotal;
+    document.getElementById('st-wins').innerText=statsWin;
+    document.getElementById('st-losses').innerText=statsLoss;
+    const pnlEl=document.getElementById('st-pnl');
+    pnlEl.innerText=(statsPnl>=0?'+':'')+statsPnl.toFixed(2);
+    pnlEl.style.color=statsPnl>0?'var(--green)':statsPnl<0?'var(--red)':'var(--muted)';
+    const wr=statsTotal>0?Math.round(statsWin/statsTotal*100):0;
+    document.getElementById('st-wr').innerText=wr+'%';
+    try{localStorage.setItem('deriv_stats',JSON.stringify({total:statsTotal,win:statsWin,loss:statsLoss,pnl:statsPnl}));}catch(e){}
+}
+function resetStats(){
+    statsTotal=0;statsWin=0;statsLoss=0;statsPnl=0;
+    openContracts={};settledContracts.clear();updateStatsDisplay();
+    try{localStorage.removeItem('deriv_stats');}catch(e){}
+}
+
+/* ════ ÉTAPE 1 : PKCE helpers ════ */
+function _pkceRandom(len){
+    const chars='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+    let s=''; for(let i=0;i<len;i++) s+=chars.charAt(Math.floor(Math.random()*chars.length));
+    return s;
+}
+async function _pkceChallenge(verifier){
+    const data=new TextEncoder().encode(verifier);
+    const digest=await crypto.subtle.digest('SHA-256',data);
+    return btoa(String.fromCharCode(...new Uint8Array(digest)))
+        .replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+async function startOAuthLogin(){
+    const state        = _pkceRandom(16);
+    const codeVerifier = _pkceRandom(64);
+    const codeChallenge= await _pkceChallenge(codeVerifier);
+    sessionStorage.setItem('oauth_state',    state);
+    sessionStorage.setItem('oauth_verifier', codeVerifier);
+    const url = 'https://auth.deriv.com/oauth2/auth'
+        + '?response_type=code'
+        + '&client_id='             + CLIENT_ID
+        + '&redirect_uri='          + encodeURIComponent(REDIRECT_URI)
+        + '&scope=trade'
+        + '&state='                 + state
+        + '&code_challenge='        + codeChallenge
+        + '&code_challenge_method=S256';
+    window.location.href = url;
+}
+
+/* ════ ÉTAPE 2 : Échange code → access_token ════ */
+async function exchangeCode(code){
+    setTokStatus('⏳ Échange du code OAuth…','var(--accent)');
+    const resp = await fetch('https://auth.deriv.com/oauth2/token',{
+        method:'POST',
+        headers:{'Content-Type':'application/x-www-form-urlencoded'},
+        body: new URLSearchParams({
+            grant_type:    'authorization_code',
+            client_id:     CLIENT_ID,
+            code:          code,
+            code_verifier: sessionStorage.getItem('oauth_verifier')||'',
+            redirect_uri:  REDIRECT_URI
+        })
+    });
+    if(!resp.ok){
+        const txt=await resp.text().catch(()=>'');
+        throw new Error('Token exchange failed '+resp.status+': '+txt);
+    }
+    const tok=await resp.json();
+    if(!tok.access_token) throw new Error('Pas de access_token dans la réponse');
+    return tok.access_token;
+}
+
+/* ════ ÉTAPE 3 : Récupérer la liste des comptes DOT/ROT ════ */
+async function fetchDerivAccounts(){
+    setTokStatus('⏳ Récupération des comptes…','var(--accent)');
+    const resp = await fetch('https://api.derivws.com/trading/v1/options/accounts',{
+        method:'GET',
+        headers:{
+            'Authorization': 'Bearer '+accessToken,
+            'Deriv-App-ID':  CLIENT_ID
+        }
+    });
+    if(!resp.ok) throw new Error('Erreur comptes HTTP '+resp.status);
+    const json=await resp.json();
+    const accounts = json.data||[];
+    if(accounts.length===0){
+        /* Créer un compte démo si aucun n'existe */
+        await fetch('https://api.derivws.com/trading/v1/options/accounts',{
+            method:'POST',
+            headers:{
+                'Authorization':'Bearer '+accessToken,
+                'Deriv-App-ID':CLIENT_ID,
+                'Content-Type':'application/json'
+            },
+            body:JSON.stringify({currency:'USD',group:'row',account_type:'demo'})
+        });
+        return fetchDerivAccounts();
+    }
+    return accounts;
+}
+
+/* ════ ÉTAPE 4 : OTP → URL WebSocket authentifiée ════ */
+async function getOtpWsUrl(accountId){
+    setTokStatus('⏳ OTP pour '+accountId+'…','var(--accent)');
+    const resp = await fetch(`https://api.derivws.com/trading/v1/options/accounts/${accountId}/otp`,{
+        method:'POST',
+        headers:{
+            'Authorization':'Bearer '+accessToken,
+            'Deriv-App-ID': CLIENT_ID
+        }
+    });
+    if(!resp.ok){
+        const err=await resp.json().catch(()=>({}));
+        throw new Error(err.error?.message||'OTP HTTP '+resp.status);
+    }
+    const otpData=await resp.json();
+    const wsUrl=otpData.data?.url;
+    if(!wsUrl) throw new Error("Aucune URL WebSocket dans la réponse OTP");
+    return wsUrl;
+}
+
+/* ════ ÉTAPE 5 : WebSocket authentifiée → trading ════ */
+function openTradingWS(wsUrl, accountId){
+    if(wsTrading){wsTrading._noReconnect=true;wsTrading.onclose=null;wsTrading.close();wsTrading=null;}
+    setTokStatus('⏳ Connexion WebSocket…','var(--accent)');
+
+    wsTrading=new WebSocket(wsUrl);
+    wsTrading._pingTimer   =null;
+    wsTrading._noReconnect =false;
+    wsTrading._accountId   =accountId;
+
+    wsTrading.onopen=()=>{
+        tradeAuthorized=true;
+        const isDemo=/^DOT/i.test(accountId);
+        const label=isDemo?'🔴 DEMO':'🟢 RÉEL';
+        setTokStatus(label+' '+accountId+' — connecté','var(--green)');
+        setBtnConnect('connected','Connecté ✓');
+        document.getElementById('btn-disconnect').style.display='inline-block';
+        showFeedback('✓ Connecté — '+label+' '+accountId,'ok');
+        /* Keepalive ping toutes les 25s */
+        wsTrading._pingTimer=setInterval(()=>{
+            if(wsTrading&&wsTrading.readyState===WebSocket.OPEN)
+                wsTrading.send(JSON.stringify({ping:1}));
+        },25000);
+    };
+
+    wsTrading.onmessage=evt=>{
+        const d=JSON.parse(evt.data);
+        /* Proposal → buy immédiat */
+        if(d.msg_type==='proposal'&&d.proposal){
+            wsTrading.send(JSON.stringify({
+                buy:   d.proposal.id,
+                price: d.proposal.ask_price,
+                req_id:2
+            }));
+        } else {
+            _handleTradingMessage(d);
+        }
+    };
+
+    wsTrading.onclose=()=>{
+        if(wsTrading&&wsTrading._pingTimer) clearInterval(wsTrading._pingTimer);
+        tradeAuthorized=false;
+        document.getElementById('btn-disconnect').style.display='none';
+        setBtnConnect('','🔐 Connexion Deriv');
+        if(wsTrading&&!wsTrading._noReconnect){
+            setTokStatus('Déconnecté — reconnexion dans 5s…','var(--muted)');
+            const aid=wsTrading._accountId;
+            setTimeout(async()=>{
+                try{
+                    const url=await getOtpWsUrl(aid);
+                    openTradingWS(url,aid);
+                }catch(e){ setTokStatus('⚠ Reconnexion échouée','var(--red)'); }
+            },5000);
+        } else {
+            setTokStatus('Déconnecté','var(--muted)');
+        }
+    };
+
+    wsTrading.onerror=()=>wsTrading.close();
+}
+
+/* ════ Sélection de compte (changement depuis UI) ════ */
+async function switchTradingAccount(accountId){
+    if(!accessToken){ showFeedback('⚠ Non connecté','err'); return; }
+    try{
+        const url=await getOtpWsUrl(accountId);
+        openTradingWS(url, accountId);
+    }catch(e){
+        setTokStatus('❌ '+e.message,'var(--red)');
+        showFeedback('❌ '+e.message,'err');
+    }
+}
+
+/* ════ Flux complet de connexion OAuth ════ */
+async function connectDeriv(){
+    try{
+        /* Récupérer la liste des comptes */
+        const accounts=await fetchDerivAccounts();
+
+        /* Construire le sélecteur de compte dans la trade bar */
+        let sel=document.getElementById('account-switcher');
+        if(!sel){
+            sel=document.createElement('select');
+            sel.id='account-switcher';
+            sel.style.cssText='background:var(--bg);border:1px solid var(--border2);color:var(--text);padding:5px 8px;border-radius:5px;font-size:11px;font-family:"JetBrains Mono",monospace;cursor:pointer;';
+            sel.addEventListener('change',e=>switchTradingAccount(e.target.value));
+            const tf=document.getElementById('btn-disconnect').parentNode;
+            tf.insertBefore(sel, document.getElementById('btn-disconnect'));
+        }
+        sel.innerHTML='';
+        accounts.forEach(acc=>{
+            const opt=document.createElement('option');
+            opt.value=acc.account_id;
+            const isDemo=acc.account_type==='demo';
+            opt.text=(isDemo?'🔴 DOT':'🟢 ROT')+' '+acc.account_id+' ('+( acc.currency||'USD')+')';
+            sel.appendChild(opt);
+        });
+
+        /* Sauvegarder token pour restauration */
+        try{localStorage.setItem('access_token',accessToken);localStorage.setItem('is_logged','true');}catch(e){}
+
+        /* Connecter automatiquement le compte réel en priorité */
+        const realAcc=accounts.find(a=>a.account_type!=='demo')||accounts[0];
+        sel.value=realAcc.account_id;
+        await switchTradingAccount(realAcc.account_id);
+
+    }catch(e){
+        setTokStatus('❌ '+e.message,'var(--red)');
+        setBtnConnect('','🔐 Connexion Deriv');
+        showFeedback('❌ '+e.message,'err');
+    }
+}
+
+/* ════ Déconnexion ════ */
+function disconnectTrading(){
+    if(wsTrading){wsTrading._noReconnect=true;wsTrading.onclose=null;wsTrading.close();wsTrading=null;}
+    tradeAuthorized=false; accessToken=null;
+    try{localStorage.removeItem('access_token');localStorage.removeItem('is_logged');}catch(e){}
+    sessionStorage.removeItem('oauth_state'); sessionStorage.removeItem('oauth_verifier');
+    const sel=document.getElementById('account-switcher');
+    if(sel) sel.remove();
+    setTokStatus('Déconnecté','var(--muted)');
+    setBtnConnect('','🔐 Connexion Deriv');
+    document.getElementById('btn-disconnect').style.display='none';
+}
+
+function setTokStatus(msg,color){ const e=document.getElementById('token-status'); e.innerText=msg; e.style.color=color; }
+function setBtnConnect(cls,txt){
+    const b=document.getElementById('btn-connect');
+    b.className=''; b.id='btn-connect';
+    if(cls) b.classList.add(cls);
+    b.innerText=txt;
+}
+
 
 /* ════════════════════════════════════════════
    CHART INIT
@@ -817,7 +1035,6 @@ function processHistory(h){
 }
 let _lastTickEpoch = 0;
 function processNewTick(tick){
-    // Déduplique sur epoch entier (pas sur HH:MM:SS qui bloque les ticks rapprochés)
     if(tick.epoch === _lastTickEpoch) return;
     _lastTickEpoch = tick.epoch;
     const ft = formatTime(tick.epoch);
@@ -1060,362 +1277,65 @@ function onAllowEqualChange(){
 }
 
 /* ════════════════════════════════════════════
-   TRADING WS
-════════════════════════════════════════════ */
-let statsTotal=0,statsWin=0,statsLoss=0,statsPnl=0.0;
-let openContracts={};
-let settledContracts=new Set();
-
-function updateStatsDisplay(){
-    document.getElementById('st-trades').innerText=statsTotal;
-    document.getElementById('st-wins').innerText=statsWin;
-    document.getElementById('st-losses').innerText=statsLoss;
-    const pnlEl=document.getElementById('st-pnl');
-    pnlEl.innerText=(statsPnl>=0?'+':'')+statsPnl.toFixed(2);
-    pnlEl.style.color=statsPnl>0?'var(--green)':statsPnl<0?'var(--red)':'var(--muted)';
-    const wr=statsTotal>0?Math.round(statsWin/statsTotal*100):0;
-    document.getElementById('st-wr').innerText=wr+'%';
-    try{localStorage.setItem('deriv_stats',JSON.stringify({total:statsTotal,win:statsWin,loss:statsLoss,pnl:statsPnl}));}catch(e){}
-}
-function resetStats(){
-    statsTotal=0;statsWin=0;statsLoss=0;statsPnl=0;
-    openContracts={};settledContracts.clear();updateStatsDisplay();
-    try{localStorage.removeItem('deriv_stats');}catch(e){}
-}
-/* ════════════════════════════════════════════
-   CONNEXION TRADING — OAuth2 + PKCE
-   Basé sur l'architecture fonctionnelle confirmée.
-   CLIENT_ID et REDIRECT_URI configurés.
-════════════════════════════════════════════ */
-
-const CLIENT_ID    = '33x2j6gNVVRZ7SA4iDxDv';
-const REDIRECT_URI = 'https://demelakoutou-debug.github.io/tieapp/';
-const DERIV_APP_ID = CLIENT_ID;
-
-// ── Outils PKCE ──
-function _pkceRandom(len) {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
-    let s = '';
-    for(let i=0;i<len;i++) s += chars.charAt(Math.floor(Math.random()*chars.length));
-    return s;
-}
-async function _pkceChallenge(verifier) {
-    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
-    return btoa(String.fromCharCode(...new Uint8Array(digest)))
-        .replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-}
-
-// ── Clic Se connecter → redirect Deriv ──
-async function connectTrading() {
-    const state        = _pkceRandom(16);
-    const codeVerifier = _pkceRandom(64);
-    const codeChallenge= await _pkceChallenge(codeVerifier);
-
-    sessionStorage.setItem('oauth_state',    state);
-    sessionStorage.setItem('oauth_verifier', codeVerifier);
-
-    const url = 'https://auth.deriv.com/oauth2/auth'
-        + '?response_type=code'
-        + '&client_id='            + CLIENT_ID
-        + '&redirect_uri='         + encodeURIComponent(REDIRECT_URI)
-        + '&scope=trade'
-        + '&state='                + state
-        + '&code_challenge='       + codeChallenge
-        + '&code_challenge_method=S256';
-
-    window.location.href = url;
-}
-
-// ── Déconnexion ──
-function disconnectTrading() {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('is_logged');
-    localStorage.removeItem('deriv_account_id');
-    if(wsTrading){ wsTrading._noReconnect=true; wsTrading.onclose=null; wsTrading.close(); wsTrading=null; }
-    tradeAuthorized = false;
-    setTokStatus('Déconnecté','var(--muted)');
-    document.getElementById('btn-connect').style.display    = 'inline-block';
-    document.getElementById('btn-disconnect').style.display = 'none';
-}
-
-// ── Initialisation OAuth au chargement de la page ──
-async function initTradingAuth() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const code      = urlParams.get('code');
-    const state     = urlParams.get('state');
-
-    // Retour OAuth : échange code → access_token
-    if(code && state) {
-        const savedState = sessionStorage.getItem('oauth_state');
-        if(state !== savedState) {
-            setTokStatus('❌ Erreur sécurité (state)','var(--red)');
-            return;
-        }
-        setTokStatus('⏳ Authentification…','var(--accent)');
-        window.history.replaceState({}, document.title, REDIRECT_URI);
-
-        try {
-            const resp = await fetch('https://auth.deriv.com/oauth2/token', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: new URLSearchParams({
-                    grant_type:    'authorization_code',
-                    client_id:     CLIENT_ID,
-                    code,
-                    code_verifier: sessionStorage.getItem('oauth_verifier'),
-                    redirect_uri:  REDIRECT_URI
-                })
-            });
-
-            if(!resp.ok) throw new Error('Échec échange token (HTTP ' + resp.status + ')');
-
-            const tok = await resp.json();
-            if(tok.access_token) {
-                localStorage.setItem('access_token', tok.access_token);
-                localStorage.setItem('is_logged',    'true');
-                sessionStorage.removeItem('oauth_state');
-                sessionStorage.removeItem('oauth_verifier');
-            }
-        } catch(err) {
-            setTokStatus('❌ ' + err.message, 'var(--red)');
-            return;
-        }
-    }
-
-    // Connecté (token en localStorage) → lancer le flux comptes + OTP
-    if(localStorage.getItem('is_logged') === 'true') {
-        const accessToken = localStorage.getItem('access_token');
-        document.getElementById('btn-connect').style.display    = 'none';
-        document.getElementById('btn-disconnect').style.display = 'inline-block';
-        await _fetchAccountsAndConnect(accessToken);
-    } else {
-        setTokStatus('Non connecté','var(--muted)');
-    }
-}
-
-// ── GET accounts → liste DOT/ROT + sélection auto ──
-async function _fetchAccountsAndConnect(accessToken) {
-    setTokStatus('⏳ Récupération des comptes…','var(--accent)');
-    try {
-        const resp = await fetch('https://api.derivws.com/trading/v1/options/accounts', {
-            headers: {
-                'Authorization': 'Bearer ' + accessToken,
-                'Deriv-App-ID' : DERIV_APP_ID
-            }
-        });
-        if(!resp.ok) throw new Error('HTTP ' + resp.status);
-
-        const json     = await resp.json();
-        const accounts = json.data || [];
-
-        if(!accounts.length) throw new Error('Aucun compte trouvé');
-
-        // Mettre à jour le sélecteur de compte dans la trade bar
-        _updateAccountSelector(accounts);
-
-        // Connecter au premier compte par défaut
-        const account   = accounts.find(a => a.account_type !== 'demo') || accounts[0];
-        const accountId = account.account_id;
-        localStorage.setItem('deriv_account_id', String(accountId));
-
-        await _connectAccountOTP(accessToken, accountId, account);
-
-    } catch(err) {
-        setTokStatus('❌ Comptes: ' + err.message, 'var(--red)');
-        document.getElementById('btn-connect').style.display    = 'inline-block';
-        document.getElementById('btn-disconnect').style.display = 'none';
-    }
-}
-
-// ── Remplir le sélecteur de compte dans la trade bar ──
-function _updateAccountSelector(accounts) {
-    const sel = document.getElementById('account-select');
-    if(!sel) return;
-    sel.innerHTML = '';
-    accounts.forEach(acc => {
-        const opt   = document.createElement('option');
-        opt.value   = acc.account_id;
-        const label = acc.account_type === 'demo' ? '🔴 DEMO (DOT)' : '🟢 RÉEL (ROT)';
-        opt.text    = label + ' — ' + acc.account_id + ' (' + (acc.currency||'USD') + ')';
-        sel.appendChild(opt);
-    });
-    sel.style.display = 'inline-block';
-}
-
-// ── POST OTP → URL WebSocket ──
-async function _connectAccountOTP(accessToken, accountId, account) {
-    const isDemo    = account.account_type === 'demo';
-    const typeLabel = isDemo ? '🔴 DEMO' : '🟢 RÉEL';
-    setTokStatus('⏳ Connexion WebSocket…','var(--accent)');
-
-    try {
-        const resp = await fetch(
-            'https://api.derivws.com/trading/v1/options/accounts/' + accountId + '/otp',
-            {
-                method : 'POST',
-                headers: {
-                    'Authorization': 'Bearer ' + accessToken,
-                    'Deriv-App-ID' : DERIV_APP_ID
-                }
-            }
-        );
-        if(!resp.ok) throw new Error('OTP HTTP ' + resp.status);
-
-        const data  = await resp.json();
-        const wsUrl = data?.data?.url;
-        if(!wsUrl) throw new Error('URL WebSocket absente');
-
-        _openTradingWS(wsUrl, accessToken, String(accountId), typeLabel);
-
-    } catch(err) {
-        setTokStatus('❌ OTP: ' + err.message, 'var(--red)');
-    }
-}
-
-// ── Changer de compte depuis le sélecteur ──
-async function switchAccount(accountId) {
-    const accessToken = localStorage.getItem('access_token');
-    if(!accessToken) return;
-    const accounts_raw = [];  // pas de cache, on refetch
-    try {
-        const resp = await fetch('https://api.derivws.com/trading/v1/options/accounts', {
-            headers: { 'Authorization':'Bearer '+accessToken, 'Deriv-App-ID':DERIV_APP_ID }
-        });
-        const json  = await resp.json();
-        const accs  = json.data || [];
-        const acc   = accs.find(a => String(a.account_id) === String(accountId));
-        if(acc) {
-            localStorage.setItem('deriv_account_id', String(accountId));
-            await _connectAccountOTP(accessToken, accountId, acc);
-        }
-    } catch(e) { setTokStatus('❌ Changement compte: '+e.message,'var(--red)'); }
-}
-
-// ── WebSocket trading (sans authorize, URL OTP suffit) ──
-function _openTradingWS(wsUrl, accessToken, accountId, typeLabel) {
-    if(wsTrading){ wsTrading._noReconnect=true; wsTrading.onclose=null; wsTrading.close(); wsTrading=null; tradeAuthorized=false; }
-
-    wsTrading = new WebSocket(wsUrl);
-    wsTrading._pingTimer   = null;
-    wsTrading._noReconnect = false;
-    wsTrading._token       = accessToken;
-    wsTrading._accountId   = accountId;
-
-    wsTrading.onopen = () => {
-        tradeAuthorized = true;
-        setTokStatus('✓ ' + accountId + ' ' + typeLabel, 'var(--green)');
-        // Update account selector value
-        const sel = document.getElementById('account-select');
-        if(sel) sel.value = accountId;
-        wsTrading._pingTimer = setInterval(()=>{
-            if(wsTrading && wsTrading.readyState === WebSocket.OPEN)
-                wsTrading.send(JSON.stringify({ping:1}));
-        }, 25000);
-    };
-
-    wsTrading.onmessage = evt => {
-        const d = JSON.parse(evt.data);
-        if(d.msg_type === 'buy'){
-            if(d.error){
-                showFeedback('❌ '+d.error.message,'err');
-            } else {
-                const b = d.buy; statsTotal++;
-                openContracts[b.contract_id] = {buy_price: parseFloat(b.buy_price)};
-                showFeedback('✓ #'+b.contract_id+' | $'+parseFloat(b.buy_price).toFixed(2),'ok');
-                updateStatsDisplay();
-                wsTrading.send(JSON.stringify({proposal_open_contract:1,contract_id:b.contract_id,subscribe:1}));
-            }
-        } else if(d.msg_type === 'proposal_open_contract'){
-            if(!d.error && d.proposal_open_contract){
-                const poc=d.proposal_open_contract, cid=poc.contract_id;
-                const isClosed=poc.status==='sold'||poc.status==='expired'||poc.is_expired===1;
-                if(isClosed && !settledContracts.has(cid)){
-                    settledContracts.add(cid);
-                    const np=parseFloat(parseFloat(poc.profit||0).toFixed(2));
-                    if(np>0)statsWin++; else if(np<0)statsLoss++;
-                    statsPnl=parseFloat((statsPnl+np).toFixed(2));
-                    delete openContracts[cid]; updateStatsDisplay();
-                    showFeedback((np>=0?'✓ Gain: ':'❌ Perte: ')+(np>=0?'+':'')+np.toFixed(2)+'$', np>=0?'ok':'err');
-                }
-            }
-        } else if(d.msg_type === 'error'){
-            showFeedback('❌ '+d.error.message,'err');
-        }
-    };
-
-    wsTrading.onclose = () => {
-        if(wsTrading && wsTrading._pingTimer) clearInterval(wsTrading._pingTimer);
-        tradeAuthorized = false;
-        if(wsTrading?._noReconnect) return;
-        setTokStatus('Déconnecté — reconnexion…','var(--muted)');
-        // OTP expire → refaire flux complet
-        const t = localStorage.getItem('access_token');
-        if(t) setTimeout(() => _fetchAccountsAndConnect(t), 5000);
-    };
-    wsTrading.onerror = () => wsTrading.close();
-}
-
-function getSavedToken()     { return localStorage.getItem('access_token')||''; }
-function getSavedAccountId() { return localStorage.getItem('deriv_account_id')||''; }
-function setTokStatus(msg,color){ const e=document.getElementById('token-status'); if(e){e.innerText=msg;e.style.color=color;} }
-function setBtnConnect(cls,txt){
-    const b=document.getElementById('btn-connect');
-    if(!b) return;
-    b.className=''; b.id='btn-connect';
-    if(cls) b.classList.add(cls);
-    b.innerText=txt;
-}
-
-
-/* ════════════════════════════════════════════
-   PLACE TRADE
+   PLACE TRADE — via proposal + buy (architecture v2)
 ════════════════════════════════════════════ */
 function placeTrade(dir){
-    if(!tradeAuthorized||!wsTrading){showFeedback('⚠ Connectez votre token d\'abord','err');return;}
+    if(!tradeAuthorized||!wsTrading||wsTrading.readyState!==WebSocket.OPEN){
+        showFeedback('⚠ Non connecté — cliquez "Connexion Deriv"','err'); return;
+    }
     const stake=parseFloat(document.getElementById('stake-input').value);
     if(!stake||stake<0.35){showFeedback('⚠ Mise min. $0.35','err');return;}
     const durVal=parseInt(document.getElementById('dur-value').value);
     if(!durVal||durVal<1){showFeedback('⚠ Durée invalide','err');return;}
     if(durType==='s'&&durVal<15){showFeedback('⚠ Durée min 15 secondes','err');return;}
+    const isAllowEqual = allowEqual && durType==='t';
     let contractType;
-    if(allowEqual){contractType=(dir==='up')?'CALLE':'PUTE';}
-    else{contractType=(dir==='up')?'CALL':'PUT';}
-    const payload={
-        buy:"1",price:stake,
-        parameters:{amount:stake,basis:"stake",contract_type:contractType,currency:"USD",duration:durVal,duration_unit:durType,symbol:tradeSymbol()}
-    };
+    if(isAllowEqual){ contractType=(dir==='up')?'CALLE':'PUTE'; }
+    else             { contractType=(dir==='up')?'CALL':'PUT';  }
     const btnId=dir==='up'?'btn-up':'btn-dn';
-    const btn=document.getElementById(btnId);
-    btn.classList.add('flash');setTimeout(()=>btn.classList.remove('flash'),500);
-    const eqLabel=allowEqual?' (≥/≤)':'';
-    showFeedback('⏳ '+contractType+eqLabel+' | $'+stake+' | '+durVal+(durType==='t'?' ticks':' sec')+' | '+tradeSymbol()+'…','pend');
-    wsTrading.send(JSON.stringify(payload));
+    document.getElementById(btnId).classList.add('flash');
+    setTimeout(()=>document.getElementById(btnId).classList.remove('flash'),500);
+    showFeedback('⏳ Cotation ['+contractType+'] | $'+stake+' | '+durVal+(durType==='t'?' ticks':' sec')+' | '+tradeSymbol()+'…','pend');
+    wsTrading.send(JSON.stringify({
+        proposal:       1,
+        amount:         stake,
+        basis:          'stake',
+        contract_type:  contractType,
+        currency:       'USD',
+        duration:       durVal,
+        duration_unit:  durType,
+        underlying_symbol: tradeSymbol(),
+        req_id:         1
+    }));
 }
 
 /* ════════════════════════════════════════════
-   DOUBLE TRADE — Rise + Fall simultané
+   DOUBLE TRADE — Rise + Fall (2 proposals séquentiels)
 ════════════════════════════════════════════ */
 function placeDoubleTrade(){
-    if(!tradeAuthorized||!wsTrading){showFeedback('⚠ Connectez votre token avant de trader','err');return;}
+    if(!tradeAuthorized||!wsTrading||wsTrading.readyState!==WebSocket.OPEN){
+        showFeedback('⚠ Non connecté — cliquez "Connexion Deriv"','err'); return;
+    }
     const stake=parseFloat(document.getElementById('stake-input').value);
     if(!stake||stake<0.35){showFeedback('⚠ Mise min. $0.35','err');return;}
     const durVal=parseInt(document.getElementById('dur-value').value);
     if(!durVal||durVal<1){showFeedback('⚠ Durée invalide','err');return;}
     if(durType==='s'&&durVal<15){showFeedback('⚠ Durée min 15 sec','err');return;}
-    const typeUp=allowEqual?'CALLE':'CALL';
-    const typeDn=allowEqual?'PUTE':'PUT';
-    const baseParams={amount:stake,basis:"stake",currency:"USD",duration:durVal,duration_unit:durType,symbol:tradeSymbol()};
-    wsTrading.send(JSON.stringify({buy:"1",price:stake,parameters:{...baseParams,contract_type:typeUp}}));
+    const isAllowEqual = allowEqual && durType==='t';
+    const typeUp=isAllowEqual?'CALLE':'CALL';
+    const typeDn=isAllowEqual?'PUTE':'PUT';
+    const base={amount:stake,basis:'stake',currency:'USD',duration:durVal,duration_unit:durType,underlying_symbol:tradeSymbol()};
+    /* Proposal CALL */
+    wsTrading.send(JSON.stringify({proposal:1,...base,contract_type:typeUp,req_id:10}));
+    /* Proposal PUT avec délai */
     setTimeout(()=>{
-        wsTrading.send(JSON.stringify({buy:"1",price:stake,parameters:{...baseParams,contract_type:typeDn}}));
-    },120);
-    const btn=document.getElementById('btn-double');
-    btn.classList.add('flash');setTimeout(()=>btn.classList.remove('flash'),500);
-    // Comptage : le handler 'buy' incrémente +1 par contrat confirmé → total +2 automatiquement
+        if(wsTrading&&wsTrading.readyState===WebSocket.OPEN)
+            wsTrading.send(JSON.stringify({proposal:1,...base,contract_type:typeDn,req_id:11}));
+    },150);
+    document.getElementById('btn-double').classList.add('flash');
+    setTimeout(()=>document.getElementById('btn-double').classList.remove('flash'),500);
     showFeedback('⏳ Double: '+typeUp+' + '+typeDn+' | $'+(stake*2).toFixed(2)+' total','pend');
 }
-
-
 
 /* ════════════════════════════════════════════
    FEEDBACK
@@ -1423,9 +1343,9 @@ function placeDoubleTrade(){
 let fbTimer=null;
 function showFeedback(msg,cls){
     const el=document.getElementById('trade-feedback-bar');
-    el.className=cls;el.innerText=msg;
+    el.className=cls; el.innerText=msg;
     clearTimeout(fbTimer);
-    if(cls!=='pend')fbTimer=setTimeout(()=>{el.className='';el.innerText='';},7000);
+    if(cls!=='pend') fbTimer=setTimeout(()=>{el.className='';el.innerText='';},7000);
 }
 
 /* ════════════════════════════════════════════
@@ -1480,7 +1400,6 @@ function updateStreak(prices,stResult){
     pill.className='streak-pill '+cls;
     pill.innerText=streak>=5?arrow+' '+streak+'  ⚠ retour?':arrow+' '+streak;
 }
-
 
 /* ════════════════════════════════════════════
    CHAÎNE DE MARKOV
@@ -1552,7 +1471,6 @@ function updateMarkovDisplay(){
     const horizon = getTradeHorizonTicks();
     const horizonLabel = document.getElementById('mk-horizon-lbl');
     if(horizonLabel) horizonLabel.innerText = horizon + (durType==='t' ? ' ticks' : ' sec');
-
     if(mkHistory.length < mkOrder + 2){
         const sigEl = document.getElementById('mk-signal');
         sigEl.className = 'mk-signal neut';
@@ -1623,67 +1541,26 @@ function queueSignal(dir){
     mkPendingSignals.push({ signal:dir, emitAt:nowIdx, resolveAt:nowIdx+horizon });
 }
 
-
 /* ════════════════════════════════════════════
    TIE PREDICTOR
-   ─────────────────────────────────────────
-   Algorithme :
-   1. À chaque tick, on enregistre le prix
-   2. Pour chaque fenêtre passée de N ticks,
-      on vérifie si prix[T+n] == prix[T]
-      (tie exact sur Step Index = même valeur)
-   3. On construit une table :
-      pattern(4 derniers mouvements U/D) →
-      { tie_at_1, tie_at_2, tie_at_3, tie_at_4, total }
-   4. On lookup le pattern courant et on prédit
-      P(tie à tick+1..+4)
-   ─────────────────────────────────────────
-   Sur Step Index, un tie = prix final identique
-   au prix d'entrée. Step = 0.1 fixe donc
-   tie possible uniquement si nb_U == nb_D
-   dans la séquence → ticks pairs uniquement.
 ════════════════════════════════════════════ */
-
-// Table : patternStr → { t1,t2,t3,t4, total }
 const tpTable = {};
-// Historique brut des prix (référence aux mkPrices)
-// On utilise mkPrices directement (déjà alimenté par addMarkovPrice)
-
-// Longueur du pattern de contexte (4 ticks de mouvements)
 const TP_CTX = 4;
-// Observations minimum pour afficher une prédiction fiable
 const TP_MIN_OBS = 20;
 
 function tpGetPattern(endIdx) {
-    // Construit le pattern des TP_CTX mouvements AVANT endIdx
-    // en utilisant mkPrices
     if (endIdx < TP_CTX) return null;
     let pat = '';
-    for (let i = endIdx - TP_CTX; i < endIdx; i++) {
+    for (let i = endIdx - TP_CTX; i < endIdx; i++)
         pat += (mkPrices[i+1] >= mkPrices[i]) ? 'U' : 'D';
-    }
     return pat;
 }
-
 function tpUpdate() {
     const prices = mkPrices;
     const n = prices.length;
-
-    // Besoin d'au moins TP_CTX + 4 prix pour analyser
-    if (n < TP_CTX + 5) {
-        updateTieDisplay(null, null);
-        return;
-    }
-
-    // Rebuild table from scratch (incrémental serait mieux
-    // mais la table est petite — 2^4 = 16 patterns max)
+    if (n < TP_CTX + 5) { updateTieDisplay(null, null); return; }
     Object.keys(tpTable).forEach(k => delete tpTable[k]);
-
-    // Parcourir tout l'historique disponible
-    // Pour chaque position T (avec contexte dispo + 4 ticks futurs) :
-    //   pattern = mouvements T-4..T-1
-    //   tie_at_k = prix[T+k] == prix[T]  (pour k=1..4)
-    const limit = n - 4;  // besoin de 4 ticks futurs
+    const limit = n - 4;
     for (let t = TP_CTX; t < limit; t++) {
         const pat = tpGetPattern(t);
         if (!pat) continue;
@@ -1691,53 +1568,31 @@ function tpUpdate() {
         const entry = tpTable[pat];
         entry.total++;
         const ref = prices[t];
-        // Tie = retour au même prix (comparaison sur 1 décimale pour Step Index)
         if (Math.abs(prices[t+1] - ref) < 0.05) entry.t1++;
         if (Math.abs(prices[t+2] - ref) < 0.05) entry.t2++;
         if (Math.abs(prices[t+3] - ref) < 0.05) entry.t3++;
         if (Math.abs(prices[t+4] - ref) < 0.05) entry.t4++;
     }
-
-    // Pattern courant = les 4 derniers mouvements
     const curPat = tpGetPattern(n - 1);
-
-    // Stats globales (tous ties observés / total observations)
     let totalObs = 0, totalTies1 = 0;
-    Object.values(tpTable).forEach(v => {
-        totalObs   += v.total;
-        totalTies1 += v.t1;
-    });
-
+    Object.values(tpTable).forEach(v => { totalObs += v.total; totalTies1 += v.t1; });
     updateTieDisplay(curPat, totalObs, totalTies1);
 }
-
 function updateTieDisplay(curPat, totalObs, totalTies1) {
-    // ── Stats globales ──
-    document.getElementById('tp-total').innerText =
-        totalObs > 0 ? totalTies1 + ' / ' + totalObs : '0';
-    document.getElementById('tp-rate').innerText =
-        totalObs > 0 ? (totalTies1/totalObs*100).toFixed(1)+'%' : '—';
-
-    // ── Meilleur pattern → tie ──
+    document.getElementById('tp-total').innerText  = totalObs > 0 ? totalTies1 + ' / ' + totalObs : '0';
+    document.getElementById('tp-rate').innerText   = totalObs > 0 ? (totalTies1/totalObs*100).toFixed(1)+'%' : '—';
     const entries = Object.entries(tpTable)
         .filter(([,v]) => v.total >= TP_MIN_OBS)
         .sort((a,b) => (b[1].t1/b[1].total) - (a[1].t1/a[1].total));
     if (entries.length > 0) {
         const [bestPat, bv] = entries[0];
-        const bRate = (bv.t1/bv.total*100).toFixed(1);
         document.getElementById('tp-best-pattern').innerText =
-            patToArrows(bestPat) + '  →  ' + bRate + '% tie  (' + bv.total + ' obs)';
+            patToArrows(bestPat) + '  →  ' + (bv.t1/bv.total*100).toFixed(1) + '% tie  (' + bv.total + ' obs)';
     } else {
         document.getElementById('tp-best-pattern').innerText = '— collecte…';
     }
-
-    // ── Contexte actuel ──
-    document.getElementById('tp-context').innerText =
-        curPat ? patToArrows(curPat) : '—';
-
-    // ── Prédiction 4 ticks ──
+    document.getElementById('tp-context').innerText = curPat ? patToArrows(curPat) : '—';
     if (!curPat || !tpTable[curPat] || tpTable[curPat].total < TP_MIN_OBS) {
-        // Pas assez de données pour ce pattern → retomber sur théorique
         const obs = tpTable[curPat] ? tpTable[curPat].total : 0;
         for (let k = 1; k <= 4; k++) {
             const pTheo = k % 2 === 0 ? computePTie(k) : 0;
@@ -1745,48 +1600,29 @@ function updateTieDisplay(curPat, totalObs, totalTies1) {
         }
         const sig = document.getElementById('tp-signal');
         sig.className = 'tie-signal neut';
-        sig.innerText = obs > 0
-            ? '⏳ ' + obs + '/' + TP_MIN_OBS + ' obs pour ce pattern'
-            : '⏳ Pattern inconnu — théorique';
+        sig.innerText = obs > 0 ? '⏳ ' + obs + '/' + TP_MIN_OBS + ' obs pour ce pattern' : '⏳ Pattern inconnu — théorique';
         return;
     }
-
     const e = tpTable[curPat];
-    const p1 = e.t1/e.total;
-    const p2 = e.t2/e.total;
-    const p3 = e.t3/e.total;
-    const p4 = e.t4/e.total;
-    const probs = [p1,p2,p3,p4];
-
+    const probs = [e.t1/e.total, e.t2/e.total, e.t3/e.total, e.t4/e.total];
     for (let k = 1; k <= 4; k++) setTieBox(k, probs[k-1], e.total);
-
-    // Signal global basé sur le max des 4
     const maxP = Math.max(...probs);
     const maxK = probs.indexOf(maxP) + 1;
     const sig  = document.getElementById('tp-signal');
-    if (maxP >= 0.35) {
-        sig.className = 'tie-signal danger';
-        sig.innerText = '⚠ Tie prob. élevée à +' + maxK + ' (' + (maxP*100).toFixed(1) + '%)';
-    } else if (maxP >= 0.20) {
-        sig.className = 'tie-signal caution';
-        sig.innerText = '⚡ Attention tie à +' + maxK + ' (' + (maxP*100).toFixed(1) + '%)';
-    } else {
-        sig.className = 'tie-signal safe';
-        sig.innerText = '✓ Tie peu probable (' + (maxP*100).toFixed(1) + '% max)';
-    }
+    if (maxP >= 0.35)      { sig.className='tie-signal danger';  sig.innerText='⚠ Tie prob. élevée à +'+maxK+' ('+(maxP*100).toFixed(1)+'%)'; }
+    else if (maxP >= 0.20) { sig.className='tie-signal caution'; sig.innerText='⚡ Attention tie à +'+maxK+' ('+(maxP*100).toFixed(1)+'%)'; }
+    else                   { sig.className='tie-signal safe';    sig.innerText='✓ Tie peu probable ('+(maxP*100).toFixed(1)+'% max)'; }
 }
-
 function setTieBox(k, p, obs) {
     const pct  = (p * 100).toFixed(1);
     const pctN = parseFloat(pct);
     document.getElementById('tp-pct-' + k).innerText = pctN > 0 ? pct + '%' : '—';
     const bar = document.getElementById('tp-bar-' + k);
-    bar.style.width = Math.min(pctN * 2.5, 100) + '%'; // scale: 40% → full bar
+    bar.style.width      = Math.min(pctN * 2.5, 100) + '%';
     bar.style.background = pctN >= 35 ? 'var(--red)' : pctN >= 20 ? 'var(--orange)' : 'var(--green)';
     const box = document.getElementById('tp-box-' + k);
     box.className = 'tie-tick-box' + (pctN >= 35 ? ' hot' : pctN >= 20 ? ' caution' : '');
 }
-
 function patToArrows(pat) {
     return pat.split('').map(c => c === 'U' ? '▲' : '▼').join('');
 }
@@ -1796,7 +1632,7 @@ function patToArrows(pat) {
 ════════════════════════════════════════════ */
 function computePTie(n){
     if(n%2!==0)return 0;
-    let num=1,den=1;const half=n/2;
+    let num=1,den=1; const half=n/2;
     for(let i=0;i<half;i++){num*=(n-i);den*=(i+1);}
     return(num/den)/Math.pow(2,n);
 }
@@ -1841,7 +1677,7 @@ function updateEV(){
     netEl.innerText='→ '+(ev>=0?'+':'')+ev.toFixed(3)+'$';
     netEl.className='ev-val '+(ev>=0?'ev-pos':'ev-neg');
     const tagEl=document.getElementById('ev-mode-tag');
-    tagEl.className='ev-mode-tag '+modeTag;tagEl.innerText=mode;
+    tagEl.className='ev-mode-tag '+modeTag; tagEl.innerText=mode;
     document.getElementById('ev-advice').innerText=advice;
 }
 
@@ -1850,26 +1686,26 @@ document.getElementById('stake-input').addEventListener('change', updateDoubleLa
 
 ['dur-value','stake-input','allow-equal-chk'].forEach(id=>{
     const el=document.getElementById(id);
-    if(el)el.addEventListener('change',updateEV);
-    if(el)el.addEventListener('input',updateEV);
+    if(el) el.addEventListener('change', updateEV);
+    if(el) el.addEventListener('input',  updateEV);
 });
 
 document.getElementById('market-select').addEventListener('change',e=>{
     currentSymbol=e.target.value;
     ticksData={times:[],prices:[],highs:[],lows:[]};
-    sessionHigh=null;sessionLow=null;
+    sessionHigh=null; sessionLow=null;
     ['stat-high','stat-low'].forEach(id=>document.getElementById(id).innerText='—');
     document.getElementById('last-price').innerText='—';
     if(chart){chart.data.labels=[];chart.data.datasets.forEach(d=>d.data=[]);chart.update('none');}
     clearPeakLabels();
-    mkHistory.length = 0; mkPrices.length = 0;
-    mkPendingSignals = []; mkLastQueuedAt = -999;
-    Object.keys(mkTransitions).forEach(k => delete mkTransitions[k]);
-    Object.keys(tpTable).forEach(k => delete tpTable[k]);
-    mkSigTotal = 0; mkSigWin = 0;
-    document.getElementById('mk-signal').className = 'mk-signal neut';
-    document.getElementById('mk-signal').innerText  = '— attente';
-    document.getElementById('mk-matrix').innerHTML  = '—';
+    mkHistory.length=0; mkPrices.length=0;
+    mkPendingSignals=[]; mkLastQueuedAt=-999;
+    Object.keys(mkTransitions).forEach(k=>delete mkTransitions[k]);
+    Object.keys(tpTable).forEach(k=>delete tpTable[k]);
+    mkSigTotal=0; mkSigWin=0;
+    document.getElementById('mk-signal').className='mk-signal neut';
+    document.getElementById('mk-signal').innerText='— attente';
+    document.getElementById('mk-matrix').innerHTML='—';
     connectChartWS();
 });
 
@@ -1877,24 +1713,68 @@ document.getElementById('market-select').addEventListener('change',e=>{
    BOOT
 ════════════════════════════════════════════ */
 function toggleEVBar(){
-    const bar = document.getElementById('ev-bar');
-    const btn = document.getElementById('ev-collapse-btn');
-    const collapsed = bar.classList.toggle('collapsed');
-    btn.innerText = collapsed ? '▼' : '▲';
-    btn.title     = collapsed ? 'Agrandir' : 'Réduire';
+    const bar=document.getElementById('ev-bar');
+    const btn=document.getElementById('ev-collapse-btn');
+    const collapsed=bar.classList.toggle('collapsed');
+    btn.innerText=collapsed?'▼':'▲';
+    btn.title=collapsed?'Agrandir':'Réduire';
 }
 
-window.onload=async()=>{
+window.onload = async () => {
     initChart();
     connectChartWS();
     updateEV();
     updateDoubleLabel();
-    // OAuth callback ou reconnexion auto
-    await initTradingAuth();
+
+    /* ── Restaurer stats ── */
     try{
         const s=JSON.parse(localStorage.getItem('deriv_stats')||'{}');
         if(s.total!=null){statsTotal=s.total;statsWin=s.win;statsLoss=s.loss;statsPnl=s.pnl;updateStatsDisplay();}
     }catch(e){}
+
+    /* ── Lire le callback OAuth (code dans l'URL) ── */
+    const urlParams=new URLSearchParams(window.location.search);
+    const code=urlParams.get('code');
+    const state=urlParams.get('state');
+
+    if(code&&state){
+        const savedState=sessionStorage.getItem('oauth_state');
+        if(state!==savedState){
+            setTokStatus('❌ State OAuth invalide (CSRF?)','var(--red)');
+        } else {
+            try{
+                setTokStatus('⏳ Échange du code OAuth…','var(--accent)');
+                setBtnConnect('connecting','⏳ Connexion…');
+                accessToken=await exchangeCode(code);
+                localStorage.setItem('access_token',accessToken);
+                localStorage.setItem('is_logged','true');
+                sessionStorage.removeItem('oauth_state');
+                sessionStorage.removeItem('oauth_verifier');
+                window.history.replaceState({},document.title,REDIRECT_URI);
+                await connectDeriv();
+            }catch(e){
+                setTokStatus('❌ '+e.message,'var(--red)');
+                setBtnConnect('','🔐 Connexion Deriv');
+                showFeedback('❌ '+e.message,'err');
+                window.history.replaceState({},document.title,REDIRECT_URI);
+            }
+        }
+    } else if(localStorage.getItem('is_logged')==='true'){
+        /* Restaurer session sauvegardée */
+        accessToken=localStorage.getItem('access_token');
+        if(accessToken){
+            setTokStatus('⏳ Restauration session…','var(--accent)');
+            setBtnConnect('connecting','⏳ Connexion…');
+            try{ await connectDeriv(); }
+            catch(e){
+                /* Token expiré → nettoyer silencieusement */
+                localStorage.removeItem('access_token'); localStorage.removeItem('is_logged');
+                setBtnConnect('','🔐 Connexion Deriv');
+                setTokStatus('Session expirée — reconnectez-vous','var(--muted)');
+            }
+        }
+    }
+
     setInterval(()=>{
         if(ticksData.prices.length){if(showLevels)updatePriceLines();if(showFractal)drawPeakLabels();}
     },400);
