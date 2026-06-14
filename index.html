@@ -811,6 +811,8 @@ function openTradingWS(wsUrl, accountId){
         setBtnConnect('connected','Connecté ✓');
         document.getElementById('btn-disconnect').style.display='inline-block';
         showFeedback('✓ Connecté — '+label+' '+accountId,'ok');
+        /* Souscrire au solde en temps réel */
+        wsTrading.send(JSON.stringify({balance:1, subscribe:1}));
         /* Keepalive ping toutes les 25s */
         wsTrading._pingTimer=setInterval(()=>{
             if(wsTrading&&wsTrading.readyState===WebSocket.OPEN)
@@ -853,7 +855,16 @@ function openTradingWS(wsUrl, accountId){
 function _handleTradingMessage(d){
     if(!d || !d.msg_type) return;
 
-    /* ── Proposal reçu → exécuter le buy immédiatement ── */
+    /* ── Solde mis à jour en temps réel ── */
+    if(d.msg_type==='balance'&&!d.error&&d.balance){
+        const bal=parseFloat(d.balance.balance).toFixed(2);
+        const cur=d.balance.currency||'USD';
+        const lid=wsTrading?wsTrading._accountId:'';
+        const isDemo=/^DOT/i.test(lid);
+        const label=isDemo?'🔴 DEMO':'🟢 RÉEL';
+        setTokStatus(label+' '+lid+'  $'+bal+' '+cur,'var(--green)');
+        return;
+    }
     if(d.msg_type==='proposal'){
         if(d.error){
             showFeedback('❌ Cotation refusée : '+d.error.message,'err');
