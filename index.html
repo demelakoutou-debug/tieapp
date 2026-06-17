@@ -1097,17 +1097,26 @@ function connectChartWS(){
         setChartStatus(true);
         wsChart.send(JSON.stringify({ticks_history:currentSymbol,adjust_start_time:1,count:3000,end:'latest',start:1}));
         wsChart.send(JSON.stringify({ticks:currentSymbol}));
-        wsChart.send(JSON.stringify({time:1, subscribe:1}));
+        /* Heure serveur : requête initiale puis toutes les secondes */
+        wsChart.send(JSON.stringify({time:1}));
+        if(wsChart._timeTimer) clearInterval(wsChart._timeTimer);
+        wsChart._timeTimer = setInterval(()=>{
+            if(wsChart && wsChart.readyState===WebSocket.OPEN)
+                wsChart.send(JSON.stringify({time:1}));
+        }, 1000);
     };
     wsChart.onmessage=evt=>{
         const d=JSON.parse(evt.data);
-        if(d.msg_type==='time'&&d.time){
+        if(d.msg_type==='time' && d.time){
             updateServerTime(d.time);
-        } else if(d.msg_type==='history')processHistory(d.history);
-        else if(d.msg_type==='tick'&&d.tick.symbol===currentSymbol)processNewTick(d.tick);
+        } else if(d.msg_type==='history') processHistory(d.history);
+        else if(d.msg_type==='tick' && d.tick && d.tick.symbol===currentSymbol) processNewTick(d.tick);
     };
-    wsChart.onclose=()=>{setChartStatus(false);setTimeout(connectChartWS,4000);};
-    wsChart.onerror=()=>wsChart.close();
+    wsChart.onclose=()=>{
+        if(wsChart && wsChart._timeTimer) clearInterval(wsChart._timeTimer);
+        setChartStatus(false);
+        setTimeout(connectChartWS,4000);
+    };
 }
 function setChartStatus(on){
     document.getElementById('status-dot').className=on?'dot on':'dot';
@@ -1121,22 +1130,19 @@ function updateServerTime(epoch){
     _renderServerTime();
 }
 function _renderServerTime(){
-    /* Interpoler l'heure serveur avec l'horloge locale depuis le dernier tick */
+    if(_serverEpoch===0) return;
     const elapsed = Math.floor((Date.now() - _serverSyncAt) / 1000);
-    const ts = new Date((_serverEpoch + elapsed) * 1000);
-    const hh = String(ts.getUTCHours()).padStart(2,'0');
-    const mm = String(ts.getUTCMinutes()).padStart(2,'0');
-    const ss = String(ts.getUTCSeconds()).padStart(2,'0');
-    const yyyy = ts.getUTCFullYear();
-    const mo   = String(ts.getUTCMonth()+1).padStart(2,'0');
-    const dd   = String(ts.getUTCDate()).padStart(2,'0');
+    const ts  = new Date((_serverEpoch + elapsed) * 1000);
+    const pad = n => String(n).padStart(2,'0');
     const timeEl = document.getElementById('server-time');
     const dateEl = document.getElementById('server-date');
-    if(timeEl) timeEl.innerText = hh+':'+mm+':'+ss+' UTC';
-    if(dateEl) dateEl.innerText = yyyy+'/'+mo+'/'+dd;
+    if(timeEl) timeEl.innerText =
+        pad(ts.getUTCHours())+':'+pad(ts.getUTCMinutes())+':'+pad(ts.getUTCSeconds())+' UTC';
+    if(dateEl) dateEl.innerText =
+        ts.getUTCFullYear()+'/'+pad(ts.getUTCMonth()+1)+'/'+pad(ts.getUTCDate());
 }
-/* Tick local toutes les secondes pour animer l'heure entre les mises à jour serveur */
-setInterval(()=>{ if(_serverEpoch>0) _renderServerTime(); }, 1000);
+/* Interpolation locale entre les ticks serveur (affichage fluide) */
+setInterval(()=>{ if(_serverEpoch>0) _renderServerTime(); }, 500);
 
 /* ════════════════════════════════════════════
    DATA
