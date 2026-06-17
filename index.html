@@ -467,6 +467,42 @@
             <span class="tb-sub" id="sub-double">×2 mise</span>
         </button>
     </div>
+    <div class="tbar-vdiv"></div>
+    <!-- AUTO-TRADE MARKOV -->
+    <div class="tf" style="align-items:center;gap:4px;">
+        <span class="tf-lbl" style="text-align:center">Auto-Trade Markov</span>
+        <div class="tf-row" style="gap:5px;align-items:center;">
+            <!-- Seuil % -->
+            <div style="display:flex;flex-direction:column;align-items:center;gap:1px;">
+                <span style="font-size:8px;color:var(--muted);">Seuil %</span>
+                <input type="number" id="auto-threshold" value="55" min="50" max="99" step="1"
+                    style="width:46px;background:var(--bg);border:1px solid var(--border2);color:#fff;
+                           padding:4px 5px;border-radius:4px;font-size:11px;font-family:'JetBrains Mono',monospace;
+                           text-align:center;">
+            </div>
+            <!-- Direction -->
+            <div style="display:flex;flex-direction:column;align-items:center;gap:1px;">
+                <span style="font-size:8px;color:var(--muted);">Direction</span>
+                <select id="auto-direction"
+                    style="background:var(--bg);border:1px solid var(--border2);color:var(--text);
+                           padding:4px 5px;border-radius:4px;font-size:10px;font-family:'JetBrains Mono',monospace;cursor:pointer;">
+                    <option value="both">▲▼ Les deux</option>
+                    <option value="up">▲ Rise seul</option>
+                    <option value="dn">▼ Fall seul</option>
+                </select>
+            </div>
+            <!-- Bouton ON/OFF -->
+            <button id="btn-auto" onclick="toggleAutoTrade()"
+                style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+                       gap:1px;padding:5px 12px;border-radius:7px;border:2px solid rgba(255,170,64,.35);
+                       background:rgba(255,170,64,.08);color:var(--orange);
+                       font-family:'JetBrains Mono',monospace;font-weight:700;
+                       cursor:pointer;transition:all .18s;white-space:nowrap;font-size:12px;">
+                <span style="font-size:13px;">🤖</span>
+                <span>AUTO OFF</span>
+            </button>
+        </div>
+    </div>
 </div>
 
 <!-- ═══ EXPECTED VALUE BAR ═══ -->
@@ -1464,6 +1500,73 @@ function placeDoubleTrade(){
 }
 
 /* ════════════════════════════════════════════
+   AUTO-TRADE MARKOV
+   — Surveille P(▲) et P(▼) à chaque tick Markov
+   — Déclenche Rise/Fall si seuil % atteint
+   — Respecte direction choisie (both/up/dn)
+   — 1 seul trade à la fois (cooldown = durée)
+════════════════════════════════════════════ */
+let autoTradeOn     = false;
+let autoTradeCooldown = false;
+
+function toggleAutoTrade(){
+    if(!tradeAuthorized){
+        showFeedback('⚠ Connectez-vous avant d\'activer l\'auto-trade','err');
+        return;
+    }
+    autoTradeOn = !autoTradeOn;
+    const btn = document.getElementById('btn-auto');
+    if(autoTradeOn){
+        btn.style.background      = 'rgba(255,170,64,.25)';
+        btn.style.borderColor     = 'var(--orange)';
+        btn.style.boxShadow       = '0 0 12px rgba(255,170,64,.4)';
+        btn.innerHTML = '<span style="font-size:13px">🤖</span><span>AUTO ON</span>';
+        showFeedback('🤖 Auto-trade activé — seuil '+document.getElementById('auto-threshold').value+'%','ok');
+    } else {
+        btn.style.background      = 'rgba(255,170,64,.08)';
+        btn.style.borderColor     = 'rgba(255,170,64,.35)';
+        btn.style.boxShadow       = 'none';
+        btn.innerHTML = '<span style="font-size:13px">🤖</span><span>AUTO OFF</span>';
+        showFeedback('🤖 Auto-trade désactivé','pend');
+    }
+}
+
+function autoTradeCheck(pUp, pDn){
+    if(!autoTradeOn || autoTradeCooldown) return;
+    if(!tradeAuthorized || !wsTrading || wsTrading.readyState!==WebSocket.OPEN) return;
+
+    const threshold = parseFloat(document.getElementById('auto-threshold').value) / 100;
+    const direction = document.getElementById('auto-direction').value;
+
+    let dir = null;
+    if(direction==='up'   && pUp >= threshold) dir='up';
+    if(direction==='dn'   && pDn >= threshold) dir='dn';
+    if(direction==='both'){
+        if(pUp >= threshold && pUp >= pDn) dir='up';
+        else if(pDn >= threshold)          dir='dn';
+    }
+    if(!dir) return;
+
+    /* Cooldown = durée du trade pour éviter les surcharges */
+    autoTradeCooldown = true;
+    const durVal = parseInt(document.getElementById('dur-value').value)||5;
+    const coolMs = durType==='t' ? durVal*1200 : durVal*1000;
+    setTimeout(()=>{ autoTradeCooldown=false; }, coolMs);
+
+    /* Flash visuel sur le bouton auto */
+    const btn=document.getElementById('btn-auto');
+    btn.style.background='var(--orange)';
+    btn.style.color='#000';
+    setTimeout(()=>{
+        btn.style.background='rgba(255,170,64,.25)';
+        btn.style.color='var(--orange)';
+    },400);
+
+    showFeedback('🤖 Auto: '+(dir==='up'?'▲ RISE':'▼ FALL')+' | P(▲)='+(pUp*100).toFixed(1)+'% P(▼)='+(pDn*100).toFixed(1)+'%','pend');
+    placeTrade(dir);
+}
+
+/* ════════════════════════════════════════════
    FEEDBACK
 ════════════════════════════════════════════ */
 let fbTimer=null;
@@ -1624,6 +1727,8 @@ function updateMarkovDisplay(){
     const pDn = t.D / obs;
     document.getElementById('mk-pup').innerText = (pUp*100).toFixed(1)+'%';
     document.getElementById('mk-pdn').innerText = (pDn*100).toFixed(1)+'%';
+    /* ── Déclenchement auto-trade si activé ── */
+    if(typeof autoTradeCheck==='function') autoTradeCheck(pUp, pDn);
     if(pUp >= mkThreshold){
         sigEl.className = 'mk-signal bull' + (pUp >= 0.65 ? ' hot' : '');
         sigEl.innerText = '▲ RISE  ' + (pUp*100).toFixed(1)+'%';
