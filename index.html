@@ -357,7 +357,7 @@
 
 <!-- ═══ HEADER ═══ -->
 <header>
-    <div class="logo"><div class="logo-dot"></div>GAKOU SADIK</div>
+    <div class="logo"><div class="logo-dot"></div>DERIV LIVE</div>
     <div class="vdiv"></div>
     <div class="market-wrap">
         <select id="market-select">
@@ -395,6 +395,12 @@
         <div class="stat-block"><span class="stat-lbl">Max</span><span class="stat-val val-high" id="stat-high">—</span></div>
         <div class="stat-block"><span class="stat-lbl">Min</span><span class="stat-val val-low"  id="stat-low">—</span></div>
         <div class="live-box"><span class="live-lbl">Prix actuel</span><span id="last-price">—</span></div>
+        <div class="vdiv"></div>
+        <div class="live-box" style="min-width:110px;align-items:center;">
+            <span class="live-lbl">🕐 Serveur Deriv</span>
+            <span id="server-time" style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--accent);letter-spacing:.5px;">--:--:--</span>
+            <span id="server-date" style="font-size:9px;color:var(--muted);font-family:'JetBrains Mono',monospace;">----/--/--</span>
+        </div>
         <div class="vdiv"></div>
         <div class="status-pill"><div class="dot" id="status-dot"></div><span id="status-text">Hors ligne</span></div>
     </div>
@@ -1091,10 +1097,13 @@ function connectChartWS(){
         setChartStatus(true);
         wsChart.send(JSON.stringify({ticks_history:currentSymbol,adjust_start_time:1,count:3000,end:'latest',start:1}));
         wsChart.send(JSON.stringify({ticks:currentSymbol}));
+        wsChart.send(JSON.stringify({time:1, subscribe:1}));
     };
     wsChart.onmessage=evt=>{
         const d=JSON.parse(evt.data);
-        if(d.msg_type==='history')processHistory(d.history);
+        if(d.msg_type==='time'&&d.time){
+            updateServerTime(d.time);
+        } else if(d.msg_type==='history')processHistory(d.history);
         else if(d.msg_type==='tick'&&d.tick.symbol===currentSymbol)processNewTick(d.tick);
     };
     wsChart.onclose=()=>{setChartStatus(false);setTimeout(connectChartWS,4000);};
@@ -1104,6 +1113,30 @@ function setChartStatus(on){
     document.getElementById('status-dot').className=on?'dot on':'dot';
     document.getElementById('status-text').innerText=on?'En direct':'Reconnexion…';
 }
+
+let _serverEpoch=0, _serverSyncAt=0;
+function updateServerTime(epoch){
+    _serverEpoch  = epoch;
+    _serverSyncAt = Date.now();
+    _renderServerTime();
+}
+function _renderServerTime(){
+    /* Interpoler l'heure serveur avec l'horloge locale depuis le dernier tick */
+    const elapsed = Math.floor((Date.now() - _serverSyncAt) / 1000);
+    const ts = new Date((_serverEpoch + elapsed) * 1000);
+    const hh = String(ts.getUTCHours()).padStart(2,'0');
+    const mm = String(ts.getUTCMinutes()).padStart(2,'0');
+    const ss = String(ts.getUTCSeconds()).padStart(2,'0');
+    const yyyy = ts.getUTCFullYear();
+    const mo   = String(ts.getUTCMonth()+1).padStart(2,'0');
+    const dd   = String(ts.getUTCDate()).padStart(2,'0');
+    const timeEl = document.getElementById('server-time');
+    const dateEl = document.getElementById('server-date');
+    if(timeEl) timeEl.innerText = hh+':'+mm+':'+ss+' UTC';
+    if(dateEl) dateEl.innerText = yyyy+'/'+mo+'/'+dd;
+}
+/* Tick local toutes les secondes pour animer l'heure entre les mises à jour serveur */
+setInterval(()=>{ if(_serverEpoch>0) _renderServerTime(); }, 1000);
 
 /* ════════════════════════════════════════════
    DATA
