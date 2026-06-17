@@ -480,6 +480,24 @@
                            padding:4px 5px;border-radius:4px;font-size:11px;font-family:'JetBrains Mono',monospace;
                            text-align:center;">
             </div>
+            <!-- Cooldown -->
+            <div style="display:flex;flex-direction:column;align-items:center;gap:1px;">
+                <span style="font-size:8px;color:var(--muted);">Cooldown</span>
+                <div style="display:flex;align-items:center;gap:2px;">
+                    <input type="number" id="auto-cooldown" value="10" min="1" max="999" step="1"
+                        style="width:40px;background:var(--bg);border:1px solid var(--border2);color:#fff;
+                               padding:4px 5px;border-radius:4px;font-size:11px;font-family:'JetBrains Mono',monospace;
+                               text-align:center;">
+                    <select id="auto-cooldown-unit"
+                        style="background:var(--bg);border:1px solid var(--border2);color:var(--muted);
+                               padding:4px 3px;border-radius:4px;font-size:9px;font-family:'JetBrains Mono',monospace;cursor:pointer;">
+                        <option value="t">ticks</option>
+                        <option value="s">sec</option>
+                    </select>
+                </div>
+                <!-- Compteur cooldown actif -->
+                <span id="auto-cooldown-counter" style="font-size:8px;color:var(--red);font-family:'JetBrains Mono',monospace;display:none;">⏳ 0</span>
+            </div>
             <!-- Direction -->
             <div style="display:flex;flex-direction:column;align-items:center;gap:1px;">
                 <span style="font-size:8px;color:var(--muted);">Direction</span>
@@ -1500,14 +1518,18 @@ function placeDoubleTrade(){
 }
 
 /* ════════════════════════════════════════════
-   AUTO-TRADE MARKOV
-   — Surveille P(▲) et P(▼) à chaque tick Markov
-   — Déclenche Rise/Fall si seuil % atteint
-   — Respecte direction choisie (both/up/dn)
-   — 1 seul trade à la fois (cooldown = durée)
+   AUTO-TRADE MARKOV — COOLDOWN INTELLIGENT
+   — Après chaque trade déclenché, un cooldown
+     s'active (ticks ou secondes personnalisés)
+   — Pendant le cooldown : toutes les opportunités
+     sont ignorées silencieusement (pas de file)
+   — Le compteur visible s'affiche en temps réel
 ════════════════════════════════════════════ */
-let autoTradeOn     = false;
+let autoTradeOn       = false;
 let autoTradeCooldown = false;
+let _autoCooldownTimer  = null;   // setTimeout pour cooldown secondes
+let _autoCooldownTicks  = 0;      // compteur ticks restants
+let _autoCooldownTotal  = 0;      // valeur initiale pour affichage
 
 function toggleAutoTrade(){
     if(!tradeAuthorized){
@@ -1517,65 +1539,105 @@ function toggleAutoTrade(){
     autoTradeOn = !autoTradeOn;
     const btn = document.getElementById('btn-auto');
     if(autoTradeOn){
-        btn.style.background      = 'rgba(255,170,64,.25)';
-        btn.style.borderColor     = 'var(--orange)';
-        btn.style.boxShadow       = '0 0 12px rgba(255,170,64,.4)';
+        btn.style.background  = 'rgba(255,170,64,.25)';
+        btn.style.borderColor = 'var(--orange)';
+        btn.style.boxShadow   = '0 0 12px rgba(255,170,64,.4)';
         btn.innerHTML = '<span style="font-size:13px">🤖</span><span>AUTO ON</span>';
-        showFeedback('🤖 Auto-trade activé — seuil '+document.getElementById('auto-threshold').value+'%','ok');
+        showFeedback('🤖 Auto-trade activé — seuil ≤'+document.getElementById('auto-threshold').value+'%','ok');
     } else {
-        btn.style.background      = 'rgba(255,170,64,.08)';
-        btn.style.borderColor     = 'rgba(255,170,64,.35)';
-        btn.style.boxShadow       = 'none';
+        _clearAutoCooldown();
+        btn.style.background  = 'rgba(255,170,64,.08)';
+        btn.style.borderColor = 'rgba(255,170,64,.35)';
+        btn.style.boxShadow   = 'none';
         btn.innerHTML = '<span style="font-size:13px">🤖</span><span>AUTO OFF</span>';
         showFeedback('🤖 Auto-trade désactivé','pend');
     }
 }
 
+function _clearAutoCooldown(){
+    autoTradeCooldown  = false;
+    _autoCooldownTicks = 0;
+    if(_autoCooldownTimer){ clearTimeout(_autoCooldownTimer); _autoCooldownTimer=null; }
+    const counter = document.getElementById('auto-cooldown-counter');
+    if(counter) counter.style.display='none';
+}
+
+function _startAutoCooldown(){
+    autoTradeCooldown = true;
+    const val  = parseInt(document.getElementById('auto-cooldown').value)||10;
+    const unit = document.getElementById('auto-cooldown-unit').value;
+    const counter = document.getElementById('auto-cooldown-counter');
+    _autoCooldownTotal = val;
+
+    if(unit==='s'){
+        /* Cooldown en secondes — timer réel */
+        let remaining = val;
+        if(counter){ counter.style.display='inline'; counter.innerText='⏳ '+remaining+'s'; }
+        const tick = ()=>{
+            remaining--;
+            if(counter) counter.innerText = remaining>0 ? '⏳ '+remaining+'s' : '';
+            if(remaining<=0){
+                _clearAutoCooldown();
+            } else {
+                _autoCooldownTimer = setTimeout(tick, 1000);
+            }
+        };
+        _autoCooldownTimer = setTimeout(tick, 1000);
+    } else {
+        /* Cooldown en ticks — décompté dans autoTradeCheck */
+        _autoCooldownTicks = val;
+        if(counter){ counter.style.display='inline'; counter.innerText='⏳ '+val+'tk'; }
+    }
+}
+
 function autoTradeCheck(pUp, pDn){
-    if(!autoTradeOn || autoTradeCooldown) return;
+    if(!autoTradeOn) return;
+
+    /* Gestion cooldown ticks : décompter silencieusement */
+    if(autoTradeCooldown){
+        const unit = document.getElementById('auto-cooldown-unit').value;
+        if(unit==='t' && _autoCooldownTicks>0){
+            _autoCooldownTicks--;
+            const counter=document.getElementById('auto-cooldown-counter');
+            if(counter) counter.innerText = _autoCooldownTicks>0 ? '⏳ '+_autoCooldownTicks+'tk' : '';
+            if(_autoCooldownTicks<=0) _clearAutoCooldown();
+        }
+        return; /* Ignorer silencieusement */
+    }
+
     if(!tradeAuthorized || !wsTrading || wsTrading.readyState!==WebSocket.OPEN) return;
 
-    const threshold = parseFloat(document.getElementById('auto-threshold').value) / 100;
+    const threshold = parseFloat(document.getElementById('auto-threshold').value)/100;
     const direction = document.getElementById('auto-direction').value;
 
     /*
-     * LOGIQUE : déclenche quand le % est ÉGAL OU EN-DESSOUS du seuil personnalisé
-     * Ex : seuil=55%, P(▲)=46.2% → 46.2 <= 55 → déclenche Rise ✓
-     * Ex : seuil=55%, P(▼)=53.8% → 53.8 <= 55 → déclenche Fall ✓
+     * Déclenche quand le % est ÉGAL OU EN-DESSOUS du seuil personnalisé
+     * Ex: seuil=55%, P(▲)=46.2% → 46.2 ≤ 55 → Rise ✓
      */
     let dir = null;
-    if(direction==='up'   && pUp <= threshold) dir='up';
-    if(direction==='dn'   && pDn <= threshold) dir='dn';
+    if(direction==='up'   && pUp<=threshold) dir='up';
+    if(direction==='dn'   && pDn<=threshold) dir='dn';
     if(direction==='both'){
-        /* Les deux : déclenche celui dont le % est le plus bas (le plus "favorable") */
-        const upOk = pUp <= threshold;
-        const dnOk = pDn <= threshold;
-        if(upOk && dnOk) dir = pUp <= pDn ? 'up' : 'dn';
-        else if(upOk)    dir = 'up';
-        else if(dnOk)    dir = 'dn';
+        const upOk=pUp<=threshold, dnOk=pDn<=threshold;
+        if(upOk&&dnOk) dir=pUp<=pDn?'up':'dn';
+        else if(upOk)  dir='up';
+        else if(dnOk)  dir='dn';
     }
     if(!dir) return;
 
-    /* Cooldown = durée du trade pour éviter les surcharges */
-    autoTradeCooldown = true;
-    const durVal = parseInt(document.getElementById('dur-value').value)||5;
-    const coolMs = durType==='t' ? durVal*1200 : durVal*1000;
-    setTimeout(()=>{ autoTradeCooldown=false; }, coolMs);
+    /* Démarrer le cooldown intelligent */
+    _startAutoCooldown();
 
-    /* Flash visuel sur le bouton auto */
+    /* Flash visuel */
     const btn=document.getElementById('btn-auto');
-    btn.style.background='var(--orange)';
-    btn.style.color='#000';
-    setTimeout(()=>{
-        btn.style.background='rgba(255,170,64,.25)';
-        btn.style.color='var(--orange)';
-    },400);
+    btn.style.background='var(--orange)'; btn.style.color='#000';
+    setTimeout(()=>{ btn.style.background='rgba(255,170,64,.25)'; btn.style.color='var(--orange)'; },400);
 
     showFeedback(
         '🤖 Auto: '+(dir==='up'?'▲ RISE':'▼ FALL')
         +' | P(▲)='+(pUp*100).toFixed(1)+'%'
         +' P(▼)='+(pDn*100).toFixed(1)+'%'
-        +' | seuil ≤'+( threshold*100).toFixed(0)+'%',
+        +' | seuil≤'+(threshold*100).toFixed(0)+'%',
         'pend'
     );
     placeTrade(dir);
