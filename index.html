@@ -1538,12 +1538,21 @@ function autoTradeCheck(pUp, pDn){
     const threshold = parseFloat(document.getElementById('auto-threshold').value) / 100;
     const direction = document.getElementById('auto-direction').value;
 
+    /*
+     * LOGIQUE : déclenche quand le % est ÉGAL OU EN-DESSOUS du seuil personnalisé
+     * Ex : seuil=55%, P(▲)=46.2% → 46.2 <= 55 → déclenche Rise ✓
+     * Ex : seuil=55%, P(▼)=53.8% → 53.8 <= 55 → déclenche Fall ✓
+     */
     let dir = null;
-    if(direction==='up'   && pUp >= threshold) dir='up';
-    if(direction==='dn'   && pDn >= threshold) dir='dn';
+    if(direction==='up'   && pUp <= threshold) dir='up';
+    if(direction==='dn'   && pDn <= threshold) dir='dn';
     if(direction==='both'){
-        if(pUp >= threshold && pUp >= pDn) dir='up';
-        else if(pDn >= threshold)          dir='dn';
+        /* Les deux : déclenche celui dont le % est le plus bas (le plus "favorable") */
+        const upOk = pUp <= threshold;
+        const dnOk = pDn <= threshold;
+        if(upOk && dnOk) dir = pUp <= pDn ? 'up' : 'dn';
+        else if(upOk)    dir = 'up';
+        else if(dnOk)    dir = 'dn';
     }
     if(!dir) return;
 
@@ -1562,7 +1571,13 @@ function autoTradeCheck(pUp, pDn){
         btn.style.color='var(--orange)';
     },400);
 
-    showFeedback('🤖 Auto: '+(dir==='up'?'▲ RISE':'▼ FALL')+' | P(▲)='+(pUp*100).toFixed(1)+'% P(▼)='+(pDn*100).toFixed(1)+'%','pend');
+    showFeedback(
+        '🤖 Auto: '+(dir==='up'?'▲ RISE':'▼ FALL')
+        +' | P(▲)='+(pUp*100).toFixed(1)+'%'
+        +' P(▼)='+(pDn*100).toFixed(1)+'%'
+        +' | seuil ≤'+( threshold*100).toFixed(0)+'%',
+        'pend'
+    );
     placeTrade(dir);
 }
 
