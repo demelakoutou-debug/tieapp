@@ -724,6 +724,75 @@ function tradeSymbol(){ return TRADE_SYMBOL_MAP[currentSymbol]||currentSymbol; }
 const fmt1 = v => v != null ? v.toFixed(1) : '—';
 
 /* ════════════════════════════════════════════
+   RÉSOLUTION DYNAMIQUE DES SYMBOLES STEP INDEX
+   ─────────────────────────────────────────
+   ⚠️ FIX RACINE : le log console a révélé que "stpRNG5" (et probablement
+   les autres codes codés en dur type stpRNG2/3/4) sont acceptés par
+   ticks_history (données historiques) mais REJETÉS par l'abonnement ticks
+   temps réel ("InvalidSymbol"). Autrement dit ces codes sont périmés côté
+   Deriv pour le live, même s'ils marchent encore pour l'historique.
+   Plutôt que deviner d'autres noms, on interroge Deriv lui-même
+   ("active_symbols") pour récupérer la liste réelle et actuelle des
+   marchés Step Index, et on reconstruit le sélecteur avec ces symboles
+   garantis valides pour le flux temps réel.
+════════════════════════════════════════════ */
+function fetchActiveStepSymbolsAndInit(){
+    let done=false;
+    const probe=new WebSocket(CHART_WS_URL);
+    const fallback=()=>{
+        if(done) return; done=true;
+        console.warn('[Deriv] Résolution dynamique impossible — utilisation des symboles par défaut (risque InvalidSymbol).');
+        try{probe.close();}catch(e){}
+        connectChartWS();
+    };
+    const timeout=setTimeout(fallback,6000);
+    probe.onopen=()=>{
+        probe.send(JSON.stringify({active_symbols:'brief', product_type:'basic'}));
+    };
+    probe.onmessage=evt=>{
+        const d=JSON.parse(evt.data);
+        if(d.error){
+            console.warn('[Deriv] active_symbols erreur:', d.error.message);
+            clearTimeout(timeout); fallback(); return;
+        }
+        if(d.msg_type==='active_symbols'){
+            clearTimeout(timeout);
+            if(done) return; done=true;
+            const all=d.active_symbols||[];
+            /* Marchés Step Index : submarket "step_index" chez Deriv,
+               avec repli sur le nom affiché au cas où le code submarket
+               changerait un jour. */
+            const steps=all.filter(s=>
+                /step/i.test(s.submarket||'') ||
+                /step/i.test(s.submarket_display_name||'') ||
+                /^step\s*index/i.test(s.display_name||'')
+            );
+            console.log('[Deriv] Symboles Step Index actifs (live) :', steps.map(s=>s.symbol+' = '+s.display_name));
+            if(steps.length){
+                steps.sort((a,b)=>a.display_name.localeCompare(b.display_name,undefined,{numeric:true}));
+                const sel=document.getElementById('market-select');
+                sel.innerHTML='';
+                steps.forEach(s=>{
+                    const opt=document.createElement('option');
+                    opt.value=s.symbol; opt.text=s.display_name;
+                    sel.appendChild(opt);
+                    TRADE_SYMBOL_MAP[s.symbol]=s.symbol;
+                });
+                /* Garder "Step 500" sélectionné par défaut si présent, sinon le dernier de la liste */
+                const step500=steps.find(s=>/500/.test(s.display_name));
+                currentSymbol=step500?step500.symbol:steps[steps.length-1].symbol;
+                sel.value=currentSymbol;
+            } else {
+                console.warn('[Deriv] Aucun symbole Step Index actif trouvé dans active_symbols — utilisation des symboles par défaut.');
+            }
+            try{probe.close();}catch(e){}
+            connectChartWS();
+        }
+    };
+    probe.onerror=()=>{ clearTimeout(timeout); fallback(); };
+}
+
+/* ════════════════════════════════════════════
    TRADING — ARCHITECTURE PKCE + REST + OTP + WS
    ─────────────────────────────────────────
    1. PKCE → auth.deriv.com → code dans URL
@@ -2117,7 +2186,7 @@ function toggleEVBar(){
 
 window.onload = async () => {
     initChart();
-    connectChartWS();
+    fetchActiveStepSymbolsAndInit();
     updateEV();
     updateDoubleLabel();
 
