@@ -706,6 +706,17 @@ let lastFractalPeaks = { up:[], down:[] };
 let durType = 't';
 let allowEqual = false;
 
+/* ─── Flag d'interaction manuelle sur le graphique ───
+   Empêche l'auto-scroll d'être bloqué définitivement
+   dès que l'utilisateur zoome/déplace le graphique une fois. */
+let userInteracting = false;
+let _userInteractTimer = null;
+function markUserInteraction(){
+    userInteracting = true;
+    clearTimeout(_userInteractTimer);
+    _userInteractTimer = setTimeout(()=>{ userInteracting = false; }, 3000);
+}
+
 /* ─── Configuration OAuth2 PKCE Deriv ─── */
 const CLIENT_ID    = '33x2j6gNVVRZ7SA4iDxDv';
 const REDIRECT_URI = 'https://demelakoutou-debug.github.io/tieapp/';
@@ -1103,7 +1114,10 @@ function initChart(){
             },
             plugins:{
                 legend:{display:false},tooltip:{enabled:false},
-                zoom:{pan:{enabled:true,mode:'x',threshold:5},zoom:{wheel:{enabled:true,speed:0.07},pinch:{enabled:true},mode:'x'}}
+                zoom:{
+                    pan:{enabled:true,mode:'x',threshold:5,onPanStart:markUserInteraction},
+                    zoom:{wheel:{enabled:true,speed:0.07},pinch:{enabled:true},mode:'x',onZoomStart:markUserInteraction}
+                }
             }
         }
     });
@@ -1144,13 +1158,32 @@ window.addEventListener('mouseup',()=>{
    CHART WS
 ════════════════════════════════════════════ */
 function connectChartWS(){
-    if(wsChart){wsChart.onclose=null;wsChart.close();}
+    if(wsChart){
+        wsChart._noReconnect = true;
+        if(wsChart._timeTimer) clearInterval(wsChart._timeTimer);
+        wsChart.onclose=null;
+        wsChart.close();
+        wsChart=null;
+    }
     sessionHigh=null;sessionLow=null;
     wsChart=new WebSocket(CHART_WS_URL);
+    wsChart._noReconnect=false;
     wsChart.onopen=()=>{
         setChartStatus(true);
-        wsChart.send(JSON.stringify({ticks_history:currentSymbol,adjust_start_time:1,count:3000,end:'latest',start:1}));
-        wsChart.send(JSON.stringify({ticks:currentSymbol}));
+        /* Historique + abonnement live fusionnés en une seule requête
+           (subscribe:1) afin d'éviter un conflit avec un second appel
+           {ticks:...} séparé, qui pouvait provoquer une erreur
+           AlreadySubscribed silencieusement ignorée et couper le flux
+           de ticks après le chargement initial. */
+        wsChart.send(JSON.stringify({
+            ticks_history: currentSymbol,
+            adjust_start_time: 1,
+            count: 3000,
+            end: 'latest',
+            start: 1,
+            style: 'ticks',
+            subscribe: 1
+        }));
         /* Heure serveur : requête initiale puis toutes les secondes */
         wsChart.send(JSON.stringify({time:1}));
         if(wsChart._timeTimer) clearInterval(wsChart._timeTimer);
@@ -1161,6 +1194,14 @@ function connectChartWS(){
     };
     wsChart.onmessage=evt=>{
         const d=JSON.parse(evt.data);
+        if(d.error){
+            /* Affiche toute erreur API (ex: AlreadySubscribed, InvalidSymbol...)
+               au lieu de l'ignorer silencieusement, pour faciliter le debug. */
+            console.warn('Deriv WS error:', d.msg_type, d.error);
+            setChartStatus(false);
+            document.getElementById('status-text').innerText='Erreur: '+d.error.message;
+            return;
+        }
         if(d.msg_type==='time' && d.time){
             updateServerTime(d.time);
         } else if(d.msg_type==='history') processHistory(d.history);
@@ -1169,8 +1210,11 @@ function connectChartWS(){
     wsChart.onclose=()=>{
         if(wsChart && wsChart._timeTimer) clearInterval(wsChart._timeTimer);
         setChartStatus(false);
-        setTimeout(connectChartWS,4000);
+        if(wsChart && !wsChart._noReconnect){
+            setTimeout(connectChartWS,4000);
+        }
     };
+    wsChart.onerror=()=>{ if(wsChart) wsChart.close(); };
 }
 function setChartStatus(on){
     document.getElementById('status-dot').className=on?'dot on':'dot';
@@ -1237,7 +1281,9 @@ function processNewTick(tick){
     el.innerText   = fmt1(p);
     el.style.color = p >= (prev||p) ? 'var(--green)' : 'var(--red)';
     updateStatDisplay();
-    const atEnd = !chart || chart.scales.x.max >= chart.data.labels.length-(RIGHT_PAD+10);
+    /* Auto-scroll actif tant que l'utilisateur n'interagit pas
+       manuellement (zoom/drag) depuis moins de 3 secondes. */
+    const atEnd = !userInteracting;
     updateChartData(atEnd);
 }
 function updateStatDisplay(){
@@ -1411,6 +1457,8 @@ function toggleLevels(){
 }
 function resetZoom(){
     if(!chart)return;
+    userInteracting=false;
+    clearTimeout(_userInteractTimer);
     chart.scales.y.options.min=undefined;chart.scales.y.options.max=undefined;
     chart.resetZoom();scrollToEnd();
 }
@@ -1424,6 +1472,11 @@ function onParamsChanged(){updateChartData(false);}
 let lTimer=null;
 function debounceLines(){clearTimeout(lTimer);lTimer=setTimeout(()=>{updatePriceLines();drawPeakLabels();},50);}
 window.addEventListener('wheel',debounceLines,{passive:true});
+document.getElementById('chart-container').addEventListener('wheel', markUserInteraction, {passive:true});
+document.getElementById('chart-container').addEventListener('mousedown', e=>{
+    /* Drag pan (bouton gauche maintenu sur le canvas) compte comme interaction */
+    if(e.target && e.target.id==='cryptoChart') markUserInteraction();
+});
 
 /* ════════════════════════════════════════════
    DURATION UI
