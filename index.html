@@ -699,6 +699,12 @@ let wsChart = null;
 let chart = null;
 let currentSymbol = "stpRNG5";
 const RIGHT_PAD = 30, VIEW_WINDOW = 180;
+/* Fenêtre max (en nombre de points) utilisée pour recalculer SAR / Fractals
+   / SuperTrend à chaque tick. Recalculer sur tout l'historique (jusqu'à
+   6000 points) coûtait cher CPU à chaque tick et contribuait au thread
+   bloqué (voir updateChartData). Largement suffisant pour la
+   stabilisation de ces indicateurs. */
+const INDICATOR_WINDOW = 1500;
 let ticksData = { times:[], prices:[], highs:[], lows:[] };
 let showSAR=true, showFractal=true, showLevels=true, showST=true;
 let sessionHigh=null, sessionLow=null;
@@ -1295,12 +1301,29 @@ function updateChartData(forceEnd=false){
     const sarStep=parseFloat(document.getElementById('sar-step').value)||0.02;
     const sarMax=parseFloat(document.getElementById('sar-max').value)||0.2;
     const fracPer=parseInt(document.getElementById('fractal-period').value)||2;
-    const sarVals=calculateSAR(ticksData.highs,ticksData.lows,sarStep,sarMax);
-    const fractals=calculateFractals(ticksData.prices,fracPer);
-    lastFractalPeaks=extractPeaks(ticksData.prices,fractals,fracPer);
     const stPeriod=parseInt(document.getElementById('st-period').value)||10;
     const stMult=parseFloat(document.getElementById('st-mult').value)||3;
-    const stResult=calculateSuperTrend(ticksData.prices,null,null,stPeriod,stMult);
+
+    /* ⚠️ FIX PERFORMANCE : ne calculer SAR / Fractals / SuperTrend que sur
+       une fenêtre récente (INDICATOR_WINDOW points) plutôt que sur tout
+       l'historique (jusqu'à 6000 points), recalculé intégralement à
+       CHAQUE tick. Ce recalcul complet bloquait le thread JS assez
+       longtemps pour que plusieurs ticks WebSocket s'accumulent avant le
+       prochain rendu — c'est la cause principale des "sauts" de 2-4 ticks
+       au lieu d'un affichage fluide tick par tick. */
+    const n = ticksData.prices.length;
+    const winStart = Math.max(0, n - INDICATOR_WINDOW);
+    const wPrices = ticksData.prices.slice(winStart);
+    const wHighs  = ticksData.highs.slice(winStart);
+    const wLows   = ticksData.lows.slice(winStart);
+    const padNull = arr => Array(winStart).fill(null).concat(arr);
+
+    const sarVals = padNull(calculateSAR(wHighs,wLows,sarStep,sarMax));
+    const fractalsW = calculateFractals(wPrices,fracPer);
+    const fractals = { up: padNull(fractalsW.up), down: padNull(fractalsW.down) };
+    lastFractalPeaks=extractPeaks(ticksData.prices,fractals,fracPer);
+    const stResultW=calculateSuperTrend(wPrices,null,null,stPeriod,stMult);
+    const stResult = { bull: padNull(stResultW.bull), bear: padNull(stResultW.bear) };
     chart.data.labels=[...ticksData.times,...Array(RIGHT_PAD).fill('')];
     chart.data.datasets[0].data=ticksData.prices;
     chart.data.datasets[1].data=sarVals;
@@ -1897,6 +1920,16 @@ function queueSignal(dir){
 const tpTable = {};
 const TP_CTX = 4;
 const TP_MIN_OBS = 20;
+/* ⚠️ FIX PERFORMANCE : tpUpdate() reconstruisait TOUTE la table à chaque
+   tick en reparcourant tout l'historique (des milliers de points) — ce
+   calcul bloquait le thread JS assez longtemps pour que plusieurs ticks
+   WebSocket s'accumulent avant le prochain rendu, d'où l'effet "le prix
+   saute de 2-3-4 ticks" au lieu d'être fluide. On rend maintenant le calcul
+   incrémental : à chaque tick, on ne traite QUE le nouveau point devenu
+   éligible (O(1) au lieu de O(n)), et on garde des totaux cumulés au lieu
+   de les re-sommer sur toute la table à chaque fois. */
+let tpNextT = TP_CTX;
+let tpTotalObs = 0, tpTotalTies1 = 0;
 
 function tpGetPattern(endIdx) {
     if (endIdx < TP_CTX) return null;
@@ -1905,28 +1938,40 @@ function tpGetPattern(endIdx) {
         pat += (mkPrices[i+1] >= mkPrices[i]) ? 'U' : 'D';
     return pat;
 }
+function tpResetState(){
+    Object.keys(tpTable).forEach(k => delete tpTable[k]);
+    tpNextT = TP_CTX;
+    tpTotalObs = 0; tpTotalTies1 = 0;
+}
+function tpProcessNewData(){
+    const prices = mkPrices;
+    const n = prices.length;
+    const limit = n - 4;
+    /* Traite tous les index devenus éligibles depuis le dernier appel
+       (normalement un seul par tick — la boucle sert de rattrapage). */
+    while (tpNextT < limit) {
+        const t = tpNextT;
+        const pat = tpGetPattern(t);
+        if (pat) {
+            if (!tpTable[pat]) tpTable[pat] = {t1:0,t2:0,t3:0,t4:0,total:0};
+            const entry = tpTable[pat];
+            entry.total++; tpTotalObs++;
+            const ref = prices[t];
+            if (Math.abs(prices[t+1] - ref) < 0.05) { entry.t1++; tpTotalTies1++; }
+            if (Math.abs(prices[t+2] - ref) < 0.05) entry.t2++;
+            if (Math.abs(prices[t+3] - ref) < 0.05) entry.t3++;
+            if (Math.abs(prices[t+4] - ref) < 0.05) entry.t4++;
+        }
+        tpNextT++;
+    }
+}
 function tpUpdate() {
     const prices = mkPrices;
     const n = prices.length;
     if (n < TP_CTX + 5) { updateTieDisplay(null, null); return; }
-    Object.keys(tpTable).forEach(k => delete tpTable[k]);
-    const limit = n - 4;
-    for (let t = TP_CTX; t < limit; t++) {
-        const pat = tpGetPattern(t);
-        if (!pat) continue;
-        if (!tpTable[pat]) tpTable[pat] = {t1:0,t2:0,t3:0,t4:0,total:0};
-        const entry = tpTable[pat];
-        entry.total++;
-        const ref = prices[t];
-        if (Math.abs(prices[t+1] - ref) < 0.05) entry.t1++;
-        if (Math.abs(prices[t+2] - ref) < 0.05) entry.t2++;
-        if (Math.abs(prices[t+3] - ref) < 0.05) entry.t3++;
-        if (Math.abs(prices[t+4] - ref) < 0.05) entry.t4++;
-    }
+    tpProcessNewData();
     const curPat = tpGetPattern(n - 1);
-    let totalObs = 0, totalTies1 = 0;
-    Object.values(tpTable).forEach(v => { totalObs += v.total; totalTies1 += v.t1; });
-    updateTieDisplay(curPat, totalObs, totalTies1);
+    updateTieDisplay(curPat, tpTotalObs, tpTotalTies1);
 }
 function updateTieDisplay(curPat, totalObs, totalTies1) {
     document.getElementById('tp-total').innerText  = totalObs > 0 ? totalTies1 + ' / ' + totalObs : '0';
@@ -2051,7 +2096,7 @@ document.getElementById('market-select').addEventListener('change',e=>{
     mkHistory.length=0; mkPrices.length=0;
     mkPendingSignals=[]; mkLastQueuedAt=-999;
     Object.keys(mkTransitions).forEach(k=>delete mkTransitions[k]);
-    Object.keys(tpTable).forEach(k=>delete tpTable[k]);
+    tpResetState();
     mkSigTotal=0; mkSigWin=0;
     document.getElementById('mk-signal').className='mk-signal neut';
     document.getElementById('mk-signal').innerText='— attente';
