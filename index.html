@@ -747,25 +747,31 @@ function fetchActiveStepSymbolsAndInit(){
     };
     const timeout=setTimeout(fallback,6000);
     probe.onopen=()=>{
-        probe.send(JSON.stringify({active_symbols:'brief', product_type:'basic'}));
+        /* ⚠️ landing_company:'svg' est nécessaire : sans authentification,
+           active_symbols se base sur la géolocalisation de l'IP pour
+           déduire la landing company, et celle-ci n'inclut pas forcément
+           les indices synthétiques (Step/Volatility/Boom-Crash), qui ne
+           sont proposés que sous "svg" (Deriv (SVG) LLC). C'est
+           probablement pourquoi la liste revenait vide. */
+        probe.send(JSON.stringify({active_symbols:'brief', product_type:'basic', landing_company:'svg'}));
     };
     probe.onmessage=evt=>{
         const d=JSON.parse(evt.data);
         if(d.error){
-            console.warn('[Deriv] active_symbols erreur:', d.error.message);
+            console.warn('[Deriv] active_symbols erreur:', d.error.code, d.error.message);
             clearTimeout(timeout); fallback(); return;
         }
         if(d.msg_type==='active_symbols'){
             clearTimeout(timeout);
             if(done) return; done=true;
             const all=d.active_symbols||[];
-            /* Marchés Step Index : submarket "step_index" chez Deriv,
-               avec repli sur le nom affiché au cas où le code submarket
-               changerait un jour. */
+            console.log('[Deriv] Total symboles reçus:', all.length);
+            const synth=all.filter(s=>/synthetic/i.test(s.market||'')||/synthetic/i.test(s.market_display_name||''));
+            console.log('[Deriv] Indices synthétiques trouvés:', synth.length, synth.map(s=>({symbol:s.symbol,market:s.market,submarket:s.submarket,display:s.display_name})));
             const steps=all.filter(s=>
                 /step/i.test(s.submarket||'') ||
                 /step/i.test(s.submarket_display_name||'') ||
-                /^step\s*index/i.test(s.display_name||'')
+                /step/i.test(s.display_name||'')
             );
             console.log('[Deriv] Symboles Step Index actifs (live) :', steps.map(s=>s.symbol+' = '+s.display_name));
             if(steps.length){
@@ -783,7 +789,10 @@ function fetchActiveStepSymbolsAndInit(){
                 currentSymbol=step500?step500.symbol:steps[steps.length-1].symbol;
                 sel.value=currentSymbol;
             } else {
-                console.warn('[Deriv] Aucun symbole Step Index actif trouvé dans active_symbols — utilisation des symboles par défaut.');
+                console.warn('[Deriv] Aucun symbole "Step" trouvé même avec landing_company=svg. Voir la liste complète des indices synthétiques ci-dessus (log précédent) pour identifier le bon nom/submarket à utiliser.');
+                if(all.length===0){
+                    console.warn('[Deriv] La réponse active_symbols est totalement vide — problème réseau/serveur, pas seulement de filtrage.');
+                }
             }
             try{probe.close();}catch(e){}
             connectChartWS();
