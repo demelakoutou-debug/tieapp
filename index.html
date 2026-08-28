@@ -349,6 +349,15 @@
             transition: all .15s; line-height: 1;
         }
         #ev-collapse-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+        /* ── WS health indicator (debug) ── */
+        #ws-health {
+            position:absolute; bottom:12px; right:70px; font-size:9px;
+            font-family:'JetBrains Mono',monospace; color:var(--muted);
+            background:rgba(20,23,32,.85); border:1px solid var(--border2);
+            border-radius:4px; padding:2px 7px; pointer-events:none; z-index:6;
+        }
+        #ws-health.stale { color:var(--red); border-color:rgba(255,77,106,.5); }
     </style>
 </head>
 <body>
@@ -686,6 +695,7 @@
             <span><span class="hkey">Drag</span>Déplacer</span>
             <span><span class="hkey">↕ Axe Y</span>Étirer</span>
         </div>
+        <div id="ws-health">flux: —</div>
     </div>
     <div id="y-drag-zone"><span id="y-drag-hint">↕ SCALE</span></div>
 </div>
@@ -1142,36 +1152,88 @@ window.addEventListener('mouseup',()=>{
 
 /* ════════════════════════════════════════════
    CHART WS
+   ── FIX PRINCIPAL : la souscription "ticks" doit
+      inclure subscribe:1, sinon Deriv ne renvoie
+      qu'un seul tick et arrête le flux (c'était
+      la cause du figement après le premier rendu).
+   ── FIX SECONDAIRE : watchdog qui force une
+      reconnexion si aucun tick n'arrive plus de
+      12s alors que le marché est censé être actif.
 ════════════════════════════════════════════ */
+let _lastTickAt = 0;              // timestamp (ms) du dernier tick/historique reçu
+let _wsWatchdogTimer = null;
+const TICK_STALE_MS = 12000;      // au-delà de 12s sans tick → on considère le flux figé
+
 function connectChartWS(){
     if(wsChart){wsChart.onclose=null;wsChart.close();}
     sessionHigh=null;sessionLow=null;
+    _lastTickAt = Date.now();
     wsChart=new WebSocket(CHART_WS_URL);
     wsChart.onopen=()=>{
         setChartStatus(true);
+        _lastTickAt = Date.now();
+        setWsHealth('en direct', false);
         wsChart.send(JSON.stringify({ticks_history:currentSymbol,adjust_start_time:1,count:3000,end:'latest',start:1}));
-        wsChart.send(JSON.stringify({ticks:currentSymbol}));
-        /* Heure serveur : requête initiale puis toutes les secondes */
+        /* IMPORTANT : subscribe:1 est requis pour recevoir le flux continu de ticks.
+           Sans ça, Deriv ne renvoie qu'un seul tick puis n'envoie plus rien. */
+        wsChart.send(JSON.stringify({ticks:currentSymbol, subscribe:1}));
+        /* Heure serveur : requête initiale puis toutes les 20s (au lieu de chaque seconde,
+           pour ne pas saturer le quota de requêtes de l'app_id public) */
         wsChart.send(JSON.stringify({time:1}));
         if(wsChart._timeTimer) clearInterval(wsChart._timeTimer);
         wsChart._timeTimer = setInterval(()=>{
             if(wsChart && wsChart.readyState===WebSocket.OPEN)
                 wsChart.send(JSON.stringify({time:1}));
-        }, 1000);
+        }, 20000);
     };
     wsChart.onmessage=evt=>{
         const d=JSON.parse(evt.data);
+        if(d.error){
+            /* Une erreur sur ticks_history ou ticks (ex: rate limit, symbole invalide)
+               ne doit pas laisser le flux mourir silencieusement. */
+            setWsHealth('erreur: '+d.error.code, true);
+            return;
+        }
         if(d.msg_type==='time' && d.time){
             updateServerTime(d.time);
-        } else if(d.msg_type==='history') processHistory(d.history);
-        else if(d.msg_type==='tick' && d.tick && d.tick.symbol===currentSymbol) processNewTick(d.tick);
+        } else if(d.msg_type==='history'){
+            _lastTickAt = Date.now();
+            setWsHealth('en direct', false);
+            processHistory(d.history);
+        } else if(d.msg_type==='tick' && d.tick && d.tick.symbol===currentSymbol){
+            _lastTickAt = Date.now();
+            setWsHealth('en direct', false);
+            processNewTick(d.tick);
+        }
     };
     wsChart.onclose=()=>{
         if(wsChart && wsChart._timeTimer) clearInterval(wsChart._timeTimer);
         setChartStatus(false);
+        setWsHealth('déconnecté', true);
         setTimeout(connectChartWS,4000);
     };
+    wsChart.onerror=()=>{ try{ wsChart.close(); }catch(e){} };
 }
+
+/* ── Watchdog : si aucun tick depuis TICK_STALE_MS, on force une reconnexion ── */
+function _wsWatchdog(){
+    if(!wsChart) return;
+    const idle = Date.now() - _lastTickAt;
+    if(idle > TICK_STALE_MS){
+        setWsHealth('figé — reconnexion…', true);
+        try{ wsChart.onclose=null; wsChart.close(); }catch(e){}
+        connectChartWS();
+    } else if(idle > TICK_STALE_MS/2){
+        setWsHealth('flux lent…', true);
+    }
+}
+function setWsHealth(msg, warn){
+    const el=document.getElementById('ws-health');
+    if(!el) return;
+    el.innerText='flux: '+msg;
+    el.classList.toggle('stale', !!warn);
+}
+
 function setChartStatus(on){
     document.getElementById('status-dot').className=on?'dot on':'dot';
     document.getElementById('status-text').innerText=on?'En direct':'Reconnexion…';
@@ -2033,6 +2095,10 @@ window.onload = async () => {
     connectChartWS();
     updateEV();
     updateDoubleLabel();
+
+    /* Watchdog : vérifie toutes les 4s si le flux de ticks est figé */
+    if(_wsWatchdogTimer) clearInterval(_wsWatchdogTimer);
+    _wsWatchdogTimer = setInterval(_wsWatchdog, 4000);
 
     /* ── Restaurer stats ── */
     try{
