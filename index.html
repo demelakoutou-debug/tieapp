@@ -349,6 +349,9 @@
             transition: all .15s; line-height: 1;
         }
         #ev-collapse-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+        /* ── Live/health indicator (nouveau) ── */
+        .ws-health { font-size:8px; font-family:'JetBrains Mono',monospace; color:var(--muted); white-space:nowrap; }
     </style>
 </head>
 <body>
@@ -614,6 +617,8 @@
         <span class="streak-label">Streak</span>
         <div class="streak-pill flat" id="streak-pill">—</div>
     </div>
+    <div class="stat-sep"></div>
+    <div class="ws-health" id="ws-health-lbl">flux: —</div>
     <div id="trade-feedback-bar"></div>
     <button onclick="resetStats()" style="margin-left:6px;padding:3px 10px;background:var(--surface2);border:1px solid var(--border2);color:var(--muted);border-radius:5px;cursor:pointer;font-size:10px;font-family:'JetBrains Mono',monospace;flex-shrink:0;" onmouseover="this.style.color='var(--red)'" onmouseout="this.style.color='var(--muted)'">↺ Reset</button>
 </div>
@@ -1141,31 +1146,59 @@ window.addEventListener('mouseup',()=>{
 });
 
 /* ════════════════════════════════════════════
-   CHART WS
+   CHART WS  (avec watchdog anti-gel)
+   ─────────────────────────────────────────
+   Correctif : certains réseaux/proxys coupent les
+   WebSockets inactives SANS envoyer de frame close.
+   Le graphique restait alors figé indéfiniment sans
+   qu'aucune reconnexion ne soit déclenchée. On trace
+   désormais l'horodatage du dernier message reçu et,
+   si plus rien n'arrive pendant 12s, on force une
+   reconnexion complète.
 ════════════════════════════════════════════ */
+let _lastChartMsgAt = 0;
+let _chartWatchdogTimer = null;
+
 function connectChartWS(){
     if(wsChart){wsChart.onclose=null;wsChart.close();}
+    if(_chartWatchdogTimer){clearInterval(_chartWatchdogTimer);_chartWatchdogTimer=null;}
     sessionHigh=null;sessionLow=null;
+    _lastChartMsgAt = Date.now();
+    setWsHealth('connexion…');
+
     wsChart=new WebSocket(CHART_WS_URL);
     wsChart.onopen=()=>{
         setChartStatus(true);
-        /* Nettoyer toute souscription "ticks" résiduelle avant de resouscrire
-           (utile lors des reconnexions rapides / changement de marché) */
-        wsChart.send(JSON.stringify({forget_all:'ticks'}));
+        _lastChartMsgAt = Date.now();
+        setWsHealth('ok');
         wsChart.send(JSON.stringify({ticks_history:currentSymbol,adjust_start_time:1,count:3000,end:'latest',start:1}));
-        /* ⚠️ FIX : "subscribe:1" est OBLIGATOIRE pour recevoir un flux
-           continu de ticks. Sans ce paramètre, Deriv ne renvoie qu'UN SEUL
-           tick puis arrête d'envoyer — c'est ce qui figeait le graphique. */
-        wsChart.send(JSON.stringify({ticks:currentSymbol, subscribe:1}));
-        /* Heure serveur : requête initiale puis toutes les secondes */
+        wsChart.send(JSON.stringify({ticks:currentSymbol}));
+        /* Heure serveur : requête initiale puis toutes les secondes (sert aussi de keepalive) */
         wsChart.send(JSON.stringify({time:1}));
         if(wsChart._timeTimer) clearInterval(wsChart._timeTimer);
         wsChart._timeTimer = setInterval(()=>{
             if(wsChart && wsChart.readyState===WebSocket.OPEN)
                 wsChart.send(JSON.stringify({time:1}));
         }, 1000);
+
+        /* ── Watchdog : force la reconnexion si silence radio > 12s ── */
+        _chartWatchdogTimer = setInterval(()=>{
+            const silentFor = Date.now() - _lastChartMsgAt;
+            if(silentFor > 12000){
+                setWsHealth('reconnexion (silence '+Math.round(silentFor/1000)+'s)');
+                if(wsChart){
+                    wsChart._noWatchdogRetry = true; // évite double-reconnexion via onclose
+                    wsChart.onclose = null;
+                    try{ wsChart.close(); }catch(e){}
+                }
+                setChartStatus(false);
+                connectChartWS();
+            }
+        }, 3000);
     };
     wsChart.onmessage=evt=>{
+        _lastChartMsgAt = Date.now();
+        setWsHealth('ok');
         const d=JSON.parse(evt.data);
         if(d.msg_type==='time' && d.time){
             updateServerTime(d.time);
@@ -1174,13 +1207,20 @@ function connectChartWS(){
     };
     wsChart.onclose=()=>{
         if(wsChart && wsChart._timeTimer) clearInterval(wsChart._timeTimer);
+        if(_chartWatchdogTimer){clearInterval(_chartWatchdogTimer);_chartWatchdogTimer=null;}
         setChartStatus(false);
+        setWsHealth('déconnecté — reconnexion…');
         setTimeout(connectChartWS,4000);
     };
+    wsChart.onerror=()=>{ try{wsChart.close();}catch(e){} };
 }
 function setChartStatus(on){
     document.getElementById('status-dot').className=on?'dot on':'dot';
     document.getElementById('status-text').innerText=on?'En direct':'Reconnexion…';
+}
+function setWsHealth(msg){
+    const el=document.getElementById('ws-health-lbl');
+    if(el) el.innerText='flux: '+msg;
 }
 
 let _serverEpoch=0, _serverSyncAt=0;
@@ -1243,12 +1283,42 @@ function processNewTick(tick){
     el.innerText   = fmt1(p);
     el.style.color = p >= (prev||p) ? 'var(--green)' : 'var(--red)';
     updateStatDisplay();
+    /* NB: chart.data.labels n'a pas encore été mis à jour pour CE tick,
+       donc ce test reflète l'état de scroll avant le tick courant — c'est
+       volontaire (comportement inchangé), seul le rendu lui-même est
+       désormais throttlé via requestAnimationFrame (voir scheduleRender). */
     const atEnd = !chart || chart.scales.x.max >= chart.data.labels.length-(RIGHT_PAD+10);
-    updateChartData(atEnd);
+    scheduleRender(atEnd);
 }
 function updateStatDisplay(){
     document.getElementById('stat-high').innerText=sessionHigh!=null?fmt1(sessionHigh):'—';
     document.getElementById('stat-low').innerText =sessionLow!=null ?fmt1(sessionLow) :'—';
+}
+
+/* ════════════════════════════════════════════
+   RENDU THROTTLÉ (requestAnimationFrame)
+   ─────────────────────────────────────────
+   Correctif : recalculer SAR/Fractals/SuperTrend
+   sur tout l'historique + redessiner les labels DOM
+   à CHAQUE tick (de façon synchrone) pouvait saturer
+   le thread JS quand l'historique grossissait, donnant
+   l'impression que le graphique se fige. On regroupe
+   maintenant tous les ticks arrivés entre deux frames
+   du navigateur en un seul rendu — jamais de backlog,
+   toujours l'état le plus récent affiché.
+════════════════════════════════════════════ */
+let _renderPending  = false;
+let _renderForceEnd = false;
+function scheduleRender(forceEnd){
+    if(forceEnd) _renderForceEnd = true;
+    if(_renderPending) return;
+    _renderPending = true;
+    requestAnimationFrame(()=>{
+        _renderPending = false;
+        const fe = _renderForceEnd;
+        _renderForceEnd = false;
+        updateChartData(fe);
+    });
 }
 
 /* ════════════════════════════════════════════
