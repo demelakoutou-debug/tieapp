@@ -1149,8 +1149,14 @@ function connectChartWS(){
     wsChart=new WebSocket(CHART_WS_URL);
     wsChart.onopen=()=>{
         setChartStatus(true);
+        /* Nettoyer toute souscription "ticks" résiduelle avant de resouscrire
+           (utile lors des reconnexions rapides / changement de marché) */
+        wsChart.send(JSON.stringify({forget_all:'ticks'}));
         wsChart.send(JSON.stringify({ticks_history:currentSymbol,adjust_start_time:1,count:3000,end:'latest',start:1}));
-        wsChart.send(JSON.stringify({ticks:currentSymbol}));
+        /* ⚠️ FIX : "subscribe:1" est OBLIGATOIRE pour recevoir un flux
+           continu de ticks. Sans ce paramètre, Deriv ne renvoie qu'UN SEUL
+           tick puis arrête d'envoyer — c'est ce qui figeait le graphique. */
+        wsChart.send(JSON.stringify({ticks:currentSymbol, subscribe:1}));
         /* Heure serveur : requête initiale puis toutes les secondes */
         wsChart.send(JSON.stringify({time:1}));
         if(wsChart._timeTimer) clearInterval(wsChart._timeTimer);
