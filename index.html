@@ -957,6 +957,14 @@ function openTradingWS(wsUrl, accountId){
         showFeedback('✓ Connecté — '+label+' '+accountId,'ok');
         /* Souscrire au solde en temps réel */
         wsTrading.send(JSON.stringify({balance:1, subscribe:1}));
+        /* ⚠️ FIX RACINE : les ticks live des Step Index sont rejetés
+           ("InvalidSymbol") sur le canal PUBLIC anonyme (app_id=1089), mais
+           fonctionnent normalement sur la WebSocket AUTHENTIFIÉE du compte
+           (celle-ci, obtenue via OAuth+OTP). On y souscrit donc les ticks
+           ici, et on coupe le repli par polling qui compensait leur
+           absence pour les utilisateurs non connectés. */
+        subscribeTradingTicks();
+        stopPublicPolling();
         /* Keepalive ping toutes les 25s */
         wsTrading._pingTimer=setInterval(()=>{
             if(wsTrading&&wsTrading.readyState===WebSocket.OPEN)
@@ -974,6 +982,9 @@ function openTradingWS(wsUrl, accountId){
         tradeAuthorized=false;
         document.getElementById('btn-disconnect').style.display='none';
         setBtnConnect('','🔐 Connexion Deriv');
+        /* Plus de ticks live authentifiés — reprendre le repli par polling
+           public en attendant la reconnexion (ou la déconnexion définitive). */
+        startPublicPolling();
         if(wsTrading&&!wsTrading._noReconnect){
             setTokStatus('Déconnecté — reconnexion dans 5s…','var(--muted)');
             const aid=wsTrading._accountId;
@@ -991,6 +1002,14 @@ function openTradingWS(wsUrl, accountId){
     wsTrading.onerror=()=>wsTrading.close();
 }
 
+/* ════ Abonnement aux ticks live sur la WS authentifiée (compte connecté) ════ */
+function subscribeTradingTicks(){
+    if(!wsTrading || wsTrading.readyState!==WebSocket.OPEN) return;
+    wsTrading.send(JSON.stringify({forget_all:'ticks'}));
+    wsTrading.send(JSON.stringify({ticks:currentSymbol, subscribe:1}));
+    console.log('[Deriv Trading WS] abonnement ticks live pour', currentSymbol);
+}
+
 /* ════════════════════════════════════════════
    HANDLER MESSAGES TRADING
    — Gère proposal, buy, proposal_open_contract
@@ -998,6 +1017,19 @@ function openTradingWS(wsUrl, accountId){
 ════════════════════════════════════════════ */
 function _handleTradingMessage(d){
     if(!d || !d.msg_type) return;
+
+    /* ── Tick live du graphique (canal authentifié — voir subscribeTradingTicks) ── */
+    if(d.msg_type==='tick'){
+        if(d.error){
+            console.warn('[Deriv Trading WS] erreur ticks:', d.error.code, d.error.message);
+            return;
+        }
+        if(d.tick && d.tick.symbol===currentSymbol){
+            _lastTickReceivedAt = Date.now();
+            processNewTick(d.tick);
+        }
+        return;
+    }
 
     /* ── Solde mis à jour en temps réel ── */
     if(d.msg_type==='balance'&&!d.error&&d.balance){
@@ -1229,6 +1261,29 @@ window.addEventListener('mouseup',()=>{
 ════════════════════════════════════════════ */
 let _lastTickReceivedAt = 0;
 let _tickWatchdog = null;
+let publicPollTimer = null;
+const PUBLIC_POLL_MS = 3000;
+
+/* ════ REPLI PAR POLLING (non connecté à un compte Deriv) ════
+   Sur le canal public anonyme (app_id=1089), l'abonnement "ticks" pour les
+   Step Index renvoie une erreur InvalidSymbol — c'est une limitation
+   connue de Deriv sur ce canal pour ces symboles précis (l'historique
+   ticks_history fonctionne, mais pas le flux live). Tant que l'utilisateur
+   n'est pas connecté à son compte (voir subscribeTradingTicks, qui utilise
+   le canal AUTHENTIFIÉ où le live fonctionne), on republie régulièrement
+   la requête d'historique pour rafraîchir le graphique. */
+function startPublicPolling(){
+    stopPublicPolling();
+    publicPollTimer = setInterval(()=>{
+        if(tradeAuthorized) { stopPublicPolling(); return; }
+        if(wsChart && wsChart.readyState===WebSocket.OPEN){
+            wsChart.send(JSON.stringify({ticks_history:currentSymbol,adjust_start_time:1,count:3000,end:'latest',start:1}));
+        }
+    }, PUBLIC_POLL_MS);
+}
+function stopPublicPolling(){
+    if(publicPollTimer){ clearInterval(publicPollTimer); publicPollTimer=null; }
+}
 
 function connectChartWS(){
     if(wsChart){wsChart.onclose=null;wsChart.close();}
@@ -1238,11 +1293,12 @@ function connectChartWS(){
     wsChart.onopen=()=>{
         setChartStatus(true);
         console.log('[Deriv WS] connexion ouverte — symbole:', currentSymbol);
-        /* Historique (one-shot, sans abonnement) */
+        /* Historique (one-shot, sans abonnement). ⚠️ On ne demande PLUS
+           l'abonnement "ticks" live ici : il est systématiquement rejeté
+           ("InvalidSymbol") pour les Step Index sur ce canal public. Le
+           flux live passe désormais par subscribeTradingTicks() (canal
+           authentifié) si connecté, ou par startPublicPolling() sinon. */
         wsChart.send(JSON.stringify({ticks_history:currentSymbol,adjust_start_time:1,count:3000,end:'latest',start:1}));
-        /* Flux temps réel — subscribe:1 est OBLIGATOIRE pour un flux continu,
-           sinon Deriv ne renvoie qu'un seul tick et arrête d'envoyer. */
-        wsChart.send(JSON.stringify({ticks:currentSymbol, subscribe:1}));
         /* Heure serveur : requête initiale puis toutes les secondes */
         wsChart.send(JSON.stringify({time:1}));
         if(wsChart._timeTimer) clearInterval(wsChart._timeTimer);
@@ -1250,6 +1306,7 @@ function connectChartWS(){
             if(wsChart && wsChart.readyState===WebSocket.OPEN)
                 wsChart.send(JSON.stringify({time:1}));
         }, 1000);
+        if(!tradeAuthorized) startPublicPolling();
     };
     wsChart.onmessage=evt=>{
         const d=JSON.parse(evt.data);
@@ -1260,16 +1317,8 @@ function connectChartWS(){
         if(d.msg_type==='time' && d.time){
             updateServerTime(d.time);
         } else if(d.msg_type==='history'){
-            console.log('[Deriv WS] historique reçu:', d.history?.prices?.length, 'points');
             _lastTickReceivedAt = Date.now();
             processHistory(d.history);
-        } else if(d.msg_type==='tick'){
-            if(d.tick && d.tick.symbol===currentSymbol){
-                _lastTickReceivedAt = Date.now();
-                processNewTick(d.tick);
-            } else {
-                console.log('[Deriv WS] tick ignoré (symbole différent):', d.tick?.symbol, 'attendu:', currentSymbol);
-            }
         } else {
             console.log('[Deriv WS] message non géré:', d.msg_type, d);
         }
@@ -1289,12 +1338,13 @@ function connectChartWS(){
    proxy/CDN qui coupe le flux, veille de l'onglet, etc). Sans cette
    vérification, le graphique reste figé indéfiniment sans qu'aucune erreur
    ne soit levée. On force une reconnexion propre si aucun tick/historique
-   n'est arrivé depuis 15 secondes. */
+   n'est arrivé depuis 20 secondes (laisse une marge au polling 3s + à
+   l'espacement naturel des ticks Step Index). */
 if(_tickWatchdog) clearInterval(_tickWatchdog);
 _tickWatchdog = setInterval(()=>{
     if(!wsChart) return;
-    if(wsChart.readyState===WebSocket.OPEN && _lastTickReceivedAt>0 && (Date.now()-_lastTickReceivedAt) > 15000){
-        console.warn('[Deriv WS] Aucune donnée depuis 15s — reconnexion forcée.');
+    if(wsChart.readyState===WebSocket.OPEN && _lastTickReceivedAt>0 && (Date.now()-_lastTickReceivedAt) > 20000){
+        console.warn('[Deriv WS] Aucune donnée depuis 20s — reconnexion forcée.');
         connectChartWS();
     }
 }, 5000);
