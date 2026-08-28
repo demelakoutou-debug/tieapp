@@ -1153,27 +1153,12 @@ function connectChartWS(){
     wsChart=new WebSocket(CHART_WS_URL);
     wsChart.onopen=()=>{
         setChartStatus(true);
-        /* Nettoyer toute souscription "ticks" résiduelle avant de resouscrire
-           (utile lors des reconnexions rapides / changement de marché) */
-        wsChart.send(JSON.stringify({forget_all:'ticks'}));
-        /* ⚠️ FIX PRINCIPAL : une SEULE requête combinée "ticks_history" avec
-           subscribe:1. Envoyer "ticks_history" (sans subscribe) PUIS "ticks"
-           (avec subscribe) séparément — comme avant — crée deux souscriptions
-           concurrentes sur le même symbole : Deriv les fait alors interférer
-           l'une avec l'autre et le flux s'arrête après le premier lot de
-           données. En combinant les deux dans un seul appel, Deriv renvoie
-           l'historique une fois (msg_type:'history') PUIS continue à pousser
-           chaque nouveau tick en direct (msg_type:'tick') sur la même
-           souscription, sans interruption. */
-        wsChart.send(JSON.stringify({
-            ticks_history:currentSymbol,
-            adjust_start_time:1,
-            count:3000,
-            end:'latest',
-            start:1,
-            style:'ticks',
-            subscribe:1
-        }));
+        console.log('[Deriv WS] connexion ouverte — symbole:', currentSymbol);
+        /* Historique (one-shot, sans abonnement) */
+        wsChart.send(JSON.stringify({ticks_history:currentSymbol,adjust_start_time:1,count:3000,end:'latest',start:1}));
+        /* Flux temps réel — subscribe:1 est OBLIGATOIRE pour un flux continu,
+           sinon Deriv ne renvoie qu'un seul tick et arrête d'envoyer. */
+        wsChart.send(JSON.stringify({ticks:currentSymbol, subscribe:1}));
         /* Heure serveur : requête initiale puis toutes les secondes */
         wsChart.send(JSON.stringify({time:1}));
         if(wsChart._timeTimer) clearInterval(wsChart._timeTimer);
@@ -1185,25 +1170,33 @@ function connectChartWS(){
     wsChart.onmessage=evt=>{
         const d=JSON.parse(evt.data);
         if(d.error){
-            console.warn('[Deriv WS] erreur:', d.error.code, d.error.message);
+            console.warn('[Deriv WS] ERREUR reçue —', d.error.code, ':', d.error.message, d);
             return;
         }
         if(d.msg_type==='time' && d.time){
             updateServerTime(d.time);
         } else if(d.msg_type==='history'){
+            console.log('[Deriv WS] historique reçu:', d.history?.prices?.length, 'points');
             _lastTickReceivedAt = Date.now();
             processHistory(d.history);
-        } else if(d.msg_type==='tick' && d.tick && d.tick.symbol===currentSymbol){
-            _lastTickReceivedAt = Date.now();
-            processNewTick(d.tick);
+        } else if(d.msg_type==='tick'){
+            if(d.tick && d.tick.symbol===currentSymbol){
+                _lastTickReceivedAt = Date.now();
+                processNewTick(d.tick);
+            } else {
+                console.log('[Deriv WS] tick ignoré (symbole différent):', d.tick?.symbol, 'attendu:', currentSymbol);
+            }
+        } else {
+            console.log('[Deriv WS] message non géré:', d.msg_type, d);
         }
     };
-    wsChart.onclose=()=>{
+    wsChart.onclose=(ev)=>{
+        console.warn('[Deriv WS] connexion fermée, code:', ev?.code, 'reason:', ev?.reason);
         if(wsChart && wsChart._timeTimer) clearInterval(wsChart._timeTimer);
         setChartStatus(false);
         setTimeout(connectChartWS,4000);
     };
-    wsChart.onerror=()=>{ try{wsChart.close();}catch(e){} };
+    wsChart.onerror=(ev)=>{ console.error('[Deriv WS] erreur socket:', ev); try{wsChart.close();}catch(e){} };
 }
 
 /* ════ WATCHDOG ANTI-GEL ════
