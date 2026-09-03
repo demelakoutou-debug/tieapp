@@ -1862,33 +1862,11 @@ function calculateSuperTrend(prices,_h,_l,period,mult){
     const bull=new Array(n).fill(null),bear=new Array(n).fill(null),trend=new Array(n).fill(0);
     const p=Math.min(period,Math.floor(n/2)-1);
     if(p<2||n<p+2)return{bull,bear,trend};
-
-    /* ⚠️ FIX "Période" inactif : un Step Index bouge d'un pas de taille
-       FIXE à chaque tick (+0.1 ou -0.1). L'ancienne mesure de volatilité
-       (moyenne lissée de l'écart tick-à-tick) est donc quasi constante
-       quelle que soit la fenêtre de lissage choisie — lisser sur 5 ticks
-       ou sur 100 ticks donnait presque le même résultat, d'où "Période"
-       qui semblait sans effet alors que "Mult" agissait normalement.
-       On mesure maintenant la volatilité comme l'écart-type glissant du
-       PRIX sur la fenêtre "Période" : cette mesure dépend réellement de
-       la taille de la fenêtre (plus la période est grande, plus elle
-       capture d'amplitude de mouvement), rendant le paramètre pleinement
-       fonctionnel. Calcul en O(n) via sommes glissantes. */
     const atr=new Array(n).fill(0);
-    let sum=0, sumSq=0;
-    for(let i=0;i<n;i++){
-        sum+=prices[i]; sumSq+=prices[i]*prices[i];
-        if(i>=p){ sum-=prices[i-p]; sumSq-=prices[i-p]*prices[i-p]; }
-        const cnt=Math.min(i+1,p);
-        if(cnt>=2){
-            const mean=sum/cnt;
-            const variance=Math.max(0, sumSq/cnt - mean*mean);
-            atr[i]=Math.sqrt(variance) || 0.0001;
-        } else {
-            atr[i]=0.0001;
-        }
-    }
-
+    let seed=0;
+    for(let i=1;i<=p;i++)seed+=Math.abs(prices[i]-prices[i-1]);
+    atr[p]=seed/p;
+    for(let i=p+1;i<n;i++)atr[i]=(atr[i-1]*(p-1)+Math.abs(prices[i]-prices[i-1]))/p;
     const upper=new Array(n).fill(0),lower=new Array(n).fill(0);
     for(let i=p;i<n;i++){
         const src=(prices[i]+prices[i-1])/2;
