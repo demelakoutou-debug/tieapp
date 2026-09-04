@@ -74,6 +74,19 @@
         .dot.on { background:var(--green); box-shadow:0 0 6px var(--green); animation:dpulse 2s infinite; }
         @keyframes dpulse { 0%,100%{box-shadow:0 0 5px var(--green)}50%{box-shadow:0 0 12px var(--green)} }
 
+        /* ── Panel visibility toggles ── */
+        #panel-toggles {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 6px 14px;
+            display: flex; align-items: center; gap: 6px;
+            flex-shrink: 0; flex-wrap: wrap;
+            row-gap: 6px;
+        }
+        .pt-lbl { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-right: 2px; white-space: nowrap; flex-shrink: 0; }
+        .pt-spacer { display: flex; gap: 6px; flex-shrink: 0; margin-left: auto; }
+        #panel-toggles .btn:not(.active) { opacity: .55; }
+
         /* ── TRADE BAR ── */
         #trade-bar { background:var(--surface); border-bottom:1px solid var(--border);
                      padding:7px 14px; display:flex; align-items:center; gap:10px;
@@ -253,6 +266,51 @@
         .mk-matrix-cell.strong { color: var(--green); border-color: rgba(0,200,150,.3); }
         .mk-matrix-cell.weak   { color: var(--red);   border-color: rgba(255,77,106,.3); }
 
+        /* ── CUSUM & Hurst Bar ── */
+        #cusum-hurst-bar {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 6px 16px;
+            display: flex; align-items: center; gap: 12px;
+            flex-shrink: 0; overflow-x: auto;
+        }
+        #cusum-hurst-bar::-webkit-scrollbar { height: 0; }
+        .ch-section { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+        .ch-lbl { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; white-space: nowrap; }
+        .ch-val { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; white-space: nowrap; }
+        .ch-sep { width: 1px; height: 22px; background: var(--border); flex-shrink: 0; }
+        .ch-input {
+            width: 58px; background: var(--bg); border: 1px solid var(--border2);
+            color: #fff; padding: 5px 6px; border-radius: 4px;
+            font-size: 12px; font-family: 'JetBrains Mono', monospace;
+            text-align: center; transition: border-color .2s;
+        }
+        .ch-input:focus { outline: none; border-color: var(--accent); }
+        .ch-bar-track { width: 70px; height: 7px; background: var(--border2); border-radius: 4px; overflow: hidden; }
+        .ch-bar-fill { height: 100%; border-radius: 4px; transition: width .3s; }
+        .ch-bar-fill.sp { background: var(--green); }
+        .ch-bar-fill.sm { background: var(--red); }
+        .ch-signal {
+            padding: 3px 12px; border-radius: 5px;
+            font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700;
+            white-space: nowrap; border: 1px solid transparent; transition: all .3s;
+        }
+        .ch-signal.bull { background: rgba(0,200,150,.15); color: var(--green); border-color: rgba(0,200,150,.4); }
+        .ch-signal.bear { background: rgba(255,77,106,.15); color: var(--red);   border-color: rgba(255,77,106,.4); }
+        .ch-signal.neut { background: var(--surface2);      color: var(--muted); border-color: var(--border2); }
+        .ch-signal.trend { background: rgba(0,200,150,.15);  color: var(--green);  border-color: rgba(0,200,150,.4); }
+        .ch-signal.mean  { background: rgba(255,170,64,.15); color: var(--orange); border-color: rgba(255,170,64,.4); }
+        .ch-hurst-track {
+            position: relative; width: 110px; height: 7px;
+            border-radius: 4px; overflow: visible;
+            background: linear-gradient(to right, var(--orange), var(--border2) 45%, var(--border2) 55%, var(--green));
+        }
+        .ch-hurst-marker {
+            position: absolute; top: -3px; width: 3px; height: 13px;
+            background: #fff; border-radius: 2px; transform: translateX(-50%);
+            transition: left .4s; box-shadow: 0 0 4px rgba(0,0,0,.6);
+        }
+
         /* ── Stats bar ── */
         #stats-bar {
             background: var(--surface);
@@ -405,6 +463,21 @@
         <div class="status-pill"><div class="dot" id="status-dot"></div><span id="status-text">Hors ligne</span></div>
     </div>
 </header>
+
+<!-- ═══ PANEL VISIBILITY TOGGLES ═══ -->
+<div id="panel-toggles">
+    <span class="pt-lbl">Panneaux</span>
+    <button class="btn active" data-panel="trade-bar" onclick="togglePanelVisibility('trade-bar', this)">Trading</button>
+    <button class="btn active" data-panel="ev-bar" onclick="togglePanelVisibility('ev-bar', this)">Espérance</button>
+    <button class="btn active" data-panel="markov-bar" onclick="togglePanelVisibility('markov-bar', this)">Markov</button>
+    <button class="btn active" data-panel="cusum-hurst-bar" onclick="togglePanelVisibility('cusum-hurst-bar', this)">CUSUM/Hurst</button>
+    <button class="btn active" data-panel="stats-bar" onclick="togglePanelVisibility('stats-bar', this)">Stats</button>
+    <button class="btn active" data-panel="tie-bar" onclick="togglePanelVisibility('tie-bar', this)">Tie Predictor</button>
+    <div class="pt-spacer">
+        <button class="btn" onclick="setAllPanels(true)">Tout afficher</button>
+        <button class="btn" onclick="setAllPanels(false)">Tout masquer</button>
+    </div>
+</div>
 
 <!-- ═══ TRADE BAR ═══ -->
 <div id="trade-bar">
@@ -596,6 +669,62 @@
         <span class="mk-lbl">Matrice de transition (top états)</span>
         <div class="mk-matrix-wrap" id="mk-matrix">—</div>
     </div>
+</div>
+
+<!-- ═══ CUSUM & HURST BAR ═══ -->
+<div id="cusum-hurst-bar">
+    <div class="ch-section">
+        <span class="ch-lbl" style="color:var(--accent);font-weight:700;">⚡ CUSUM</span>
+    </div>
+    <div class="ch-sep"></div>
+    <div class="ch-section">
+        <span class="ch-lbl">Sensib. (k)</span>
+        <input class="ch-input" id="cusum-k" type="number" value="0.15" min="0.01" max="1" step="0.01" oninput="onCusumConfig()">
+    </div>
+    <div class="ch-section">
+        <span class="ch-lbl">Seuil (h)</span>
+        <input class="ch-input" id="cusum-h" type="number" value="5" min="1" max="50" step="0.5" oninput="onCusumConfig()">
+    </div>
+    <div class="ch-sep"></div>
+    <div class="ch-section">
+        <span class="ch-lbl">S+</span>
+        <div class="ch-bar-track"><div class="ch-bar-fill sp" id="cusum-splus-bar" style="width:0%"></div></div>
+        <span class="ch-val" id="cusum-splus-val" style="color:var(--green)">0.00</span>
+    </div>
+    <div class="ch-section">
+        <span class="ch-lbl">S-</span>
+        <div class="ch-bar-track"><div class="ch-bar-fill sm" id="cusum-sminus-bar" style="width:0%"></div></div>
+        <span class="ch-val" id="cusum-sminus-val" style="color:var(--red)">0.00</span>
+    </div>
+    <div class="ch-sep"></div>
+    <div class="ch-section">
+        <span class="ch-lbl">Rupture</span>
+        <div class="ch-signal neut" id="cusum-signal">— attente</div>
+    </div>
+    <div class="ch-section">
+        <span class="ch-lbl">Signaux</span>
+        <span class="ch-val" id="cusum-count" style="color:var(--muted)">0</span>
+    </div>
+    <div class="ch-sep"></div>
+    <div class="ch-section">
+        <span class="ch-lbl" style="color:var(--purple);font-weight:700;">〰 Hurst glissant</span>
+    </div>
+    <div class="ch-section">
+        <span class="ch-lbl">Fenêtre</span>
+        <input class="ch-input" id="hurst-window" type="number" value="300" min="50" max="1000" step="10" oninput="onHurstConfig()">
+    </div>
+    <div class="ch-section">
+        <span class="ch-lbl">Anti-pers. 0 ─ 0.5 ─ 1 Persist.</span>
+        <div class="ch-hurst-track"><div class="ch-hurst-marker" id="hurst-marker" style="left:50%"></div></div>
+        <span class="ch-val" id="hurst-val" style="color:var(--muted)">—</span>
+    </div>
+    <div class="ch-sep"></div>
+    <div class="ch-section">
+        <span class="ch-lbl">Régime</span>
+        <div class="ch-signal neut" id="hurst-regime">— collecte…</div>
+    </div>
+    <div class="ch-sep"></div>
+    <span style="font-size:9px;color:var(--muted);max-width:280px;line-height:1.3;" id="hurst-advice">Collecte des données en cours pour évaluer la fiabilité du SuperTrend dans ce régime.</span>
 </div>
 
 <!-- ═══ STATS BAR ═══ -->
@@ -1405,8 +1534,11 @@ function processNewTick(tick){
     if(sessionLow===null||p<sessionLow)   sessionLow=p;
     const prev = ticksData.prices.at(-2);
     if(prev != null){
+        const dir = p >= prev ? 'U' : 'D';
         addMarkovPrice(p);
-        addMarkovTick(p >= prev ? 'U' : 'D');
+        addMarkovTick(dir);
+        addCusumTick(dir);
+        updateHurstDisplay(false);
         tpUpdate();
     }
     const el = document.getElementById('last-price');
@@ -2065,6 +2197,159 @@ function queueSignal(dir){
 }
 
 /* ════════════════════════════════════════════
+   CUSUM — Détecteur de rupture (changement de régime)
+   ─────────────────────────────────────────
+   Contrairement aux moyennes/indicateurs de volatilité (ATR, Bollinger...)
+   qui dégénèrent sur un Step Index (chaque tick a une amplitude fixe), le
+   CUSUM travaille sur la DIRECTION des ticks (+1/-1), qui elle varie
+   vraiment. Il accumule l'écart entre le taux de hausses observé et 50%
+   (marché équilibré) ; dès que cet écart cumulé dépasse un seuil, ça
+   signale un changement de régime — souvent plus tôt qu'une chaîne de
+   Markov classique. Formule standard du CUSUM à deux bornes (contrôle de
+   processus statistique) :
+     S+ = max(0, S+_prev + (x - k))
+     S- = max(0, S-_prev + (-x - k))
+   où x = +1 (tick haussier) ou -1 (tick baissier), k = seuil de tolérance
+   (slack). Signal quand S+ ou S- dépasse le seuil h.
+════════════════════════════════════════════ */
+let cusumK = 0.15, cusumH = 5;
+let cusumSPlus = 0, cusumSMinus = 0;
+let cusumSignalCount = 0;
+
+function onCusumConfig(){
+    cusumK = parseFloat(document.getElementById('cusum-k').value) || 0.15;
+    cusumH = parseFloat(document.getElementById('cusum-h').value) || 5;
+}
+function resetCusumState(){
+    cusumSPlus = 0; cusumSMinus = 0; cusumSignalCount = 0;
+    document.getElementById('cusum-signal').className = 'ch-signal neut';
+    document.getElementById('cusum-signal').innerText = '— attente';
+    document.getElementById('cusum-count').innerText = '0';
+    updateCusumDisplay(null, true);
+}
+function addCusumTick(direction){
+    const x = direction === 'U' ? 1 : -1;
+    cusumSPlus  = Math.max(0, cusumSPlus  + (x  - cusumK));
+    cusumSMinus = Math.max(0, cusumSMinus + (-x - cusumK));
+    let signal = null;
+    if(cusumSPlus > cusumH){ signal = 'bull'; cusumSPlus = 0; cusumSMinus = 0; }
+    else if(cusumSMinus > cusumH){ signal = 'bear'; cusumSPlus = 0; cusumSMinus = 0; }
+    updateCusumDisplay(signal, false);
+}
+function updateCusumDisplay(signal, silent){
+    const spPct = Math.min(100, (cusumSPlus  / cusumH) * 100);
+    const smPct = Math.min(100, (cusumSMinus / cusumH) * 100);
+    document.getElementById('cusum-splus-bar').style.width  = spPct.toFixed(0)+'%';
+    document.getElementById('cusum-sminus-bar').style.width = smPct.toFixed(0)+'%';
+    document.getElementById('cusum-splus-val').innerText  = cusumSPlus.toFixed(2);
+    document.getElementById('cusum-sminus-val').innerText = cusumSMinus.toFixed(2);
+    if(silent) return;
+    if(signal){
+        cusumSignalCount++;
+        document.getElementById('cusum-count').innerText = cusumSignalCount;
+        const sigEl = document.getElementById('cusum-signal');
+        if(signal==='bull'){ sigEl.className='ch-signal bull'; sigEl.innerText='▲ RUPTURE HAUSSIÈRE'; }
+        else{ sigEl.className='ch-signal bear'; sigEl.innerText='▼ RUPTURE BAISSIÈRE'; }
+    }
+}
+
+/* ════════════════════════════════════════════
+   EXPOSANT DE HURST GLISSANT (régime du marché)
+   ─────────────────────────────────────────
+   Mesure si la série se comporte comme un vrai mouvement aléatoire
+   (H≈0.5), en tendance persistante (H>0.5, les hausses suivent les
+   hausses — bon contexte pour le SuperTrend) ou anti-persistante /
+   retour-à-la-moyenne (H<0.5, le SuperTrend risque le whipsaw).
+   Méthode utilisée : exposant de Hurst généralisé par fonction de
+   structure — pour plusieurs décalages τ (lags), on mesure l'amplitude
+   moyenne des variations de prix sur ce décalage, puis on régresse
+   log(amplitude) contre log(τ) ; la pente de cette régression est H.
+   Moins coûteux qu'un R/S classique tout en restant un indicateur reconnu.
+════════════════════════════════════════════ */
+let hurstWindow = 300;
+let hurstCurrentValue = null;
+let _hurstTickCounter = 0;
+const HURST_RECOMPUTE_EVERY = 5; // ticks — indicateur de régime lent, pas besoin de recalcul à chaque tick
+
+function onHurstConfig(){
+    hurstWindow = parseInt(document.getElementById('hurst-window').value) || 300;
+    updateHurstDisplay(true);
+}
+function computeHurstGHE(prices){
+    const n = prices.length;
+    const maxLag = Math.floor(n/4);
+    const lags = [2,4,8,16,32,64,128,256].filter(t=>t < maxLag);
+    if(lags.length < 2) return null;
+    const logPairs = [];
+    for(const tau of lags){
+        let sum=0, count=0;
+        for(let i=0;i+tau<n;i++){
+            sum += Math.abs(prices[i+tau]-prices[i]);
+            count++;
+        }
+        if(count>0){
+            const meanAbs = sum/count;
+            if(meanAbs>0) logPairs.push([Math.log(tau), Math.log(meanAbs)]);
+        }
+    }
+    if(logPairs.length < 2) return null;
+    const n2=logPairs.length;
+    let sumX=0,sumY=0,sumXY=0,sumXX=0;
+    for(const [x,y] of logPairs){ sumX+=x; sumY+=y; sumXY+=x*y; sumXX+=x*x; }
+    const denom = n2*sumXX - sumX*sumX;
+    if(denom===0) return null;
+    const slope = (n2*sumXY - sumX*sumY)/denom;
+    return Math.max(0, Math.min(1, slope));
+}
+function resetHurstState(){
+    hurstCurrentValue = null; _hurstTickCounter = 0;
+    document.getElementById('hurst-val').innerText = '—';
+    document.getElementById('hurst-val').style.color = 'var(--muted)';
+    document.getElementById('hurst-marker').style.left = '50%';
+    const regEl = document.getElementById('hurst-regime');
+    regEl.className = 'ch-signal neut'; regEl.innerText = '— collecte…';
+    document.getElementById('hurst-advice').innerText = 'Collecte des données en cours pour évaluer la fiabilité du SuperTrend dans ce régime.';
+}
+function updateHurstDisplay(force){
+    _hurstTickCounter++;
+    if(!force && (_hurstTickCounter % HURST_RECOMPUTE_EVERY !== 0)) return;
+    const prices = mkPrices;
+    if(prices.length < Math.max(60, hurstWindow/2)){
+        document.getElementById('hurst-val').innerText = '⏳ '+prices.length;
+        return;
+    }
+    const winStart = Math.max(0, prices.length - hurstWindow);
+    const H = computeHurstGHE(prices.slice(winStart));
+    if(H===null) return;
+    hurstCurrentValue = H;
+    const valEl = document.getElementById('hurst-val');
+    valEl.innerText = H.toFixed(3);
+    document.getElementById('hurst-marker').style.left = (H*100).toFixed(1)+'%';
+    const regEl = document.getElementById('hurst-regime');
+    const adviceEl = document.getElementById('hurst-advice');
+    if(H > 0.55){
+        valEl.style.color = 'var(--green)';
+        regEl.className = 'ch-signal trend';
+        regEl.innerText = '▲ Persistant (tendanciel)';
+        adviceEl.innerText = showST
+            ? '✓ Bon contexte pour le SuperTrend — le marché tend à poursuivre sa direction.'
+            : 'Régime tendanciel — le SuperTrend serait fiable ici si activé.';
+    } else if(H < 0.45){
+        valEl.style.color = 'var(--orange)';
+        regEl.className = 'ch-signal mean';
+        regEl.innerText = '↔ Anti-persistant (retour à la moyenne)';
+        adviceEl.innerText = showST
+            ? '⚠ SuperTrend peu fiable ici — risque de faux signaux (whipsaw) en régime anti-persistant.'
+            : 'Régime anti-persistant — méfiance si le SuperTrend est activé.';
+    } else {
+        valEl.style.color = 'var(--muted)';
+        regEl.className = 'ch-signal neut';
+        regEl.innerText = '— Aléatoire (bruit)';
+        adviceEl.innerText = 'Régime proche du bruit pur — à trader avec prudence, quel que soit l\'indicateur.';
+    }
+}
+
+/* ════════════════════════════════════════════
    TIE PREDICTOR
 ════════════════════════════════════════════ */
 const tpTable = {};
@@ -2247,11 +2532,14 @@ document.getElementById('market-select').addEventListener('change',e=>{
     mkPendingSignals=[]; mkLastQueuedAt=-999;
     Object.keys(mkTransitions).forEach(k=>delete mkTransitions[k]);
     tpResetState();
+    resetCusumState();
+    resetHurstState();
     mkSigTotal=0; mkSigWin=0;
     document.getElementById('mk-signal').className='mk-signal neut';
     document.getElementById('mk-signal').innerText='— attente';
     document.getElementById('mk-matrix').innerHTML='—';
     connectChartWS();
+    if(tradeAuthorized) subscribeTradingTicks();
 });
 
 /* ════════════════════════════════════════════
@@ -2265,11 +2553,59 @@ function toggleEVBar(){
     btn.title=collapsed?'Agrandir':'Réduire';
 }
 
+/* ════════════════════════════════════════════
+   VISIBILITÉ DES PANNEAUX — pour aérer l'interface
+   quand trop de bandeaux sont affichés en même temps.
+   L'état choisi est mémorisé (localStorage) et réappliqué
+   au rechargement de la page.
+════════════════════════════════════════════ */
+const PANEL_IDS = ['trade-bar','ev-bar','markov-bar','cusum-hurst-bar','stats-bar','tie-bar'];
+function togglePanelVisibility(panelId, btnEl){
+    const el = document.getElementById(panelId);
+    if(!el) return;
+    const nowHidden = el.style.display !== 'none';
+    el.style.display = nowHidden ? 'none' : '';
+    if(btnEl) btnEl.classList.toggle('active', !nowHidden);
+    savePanelVisibility();
+}
+function setAllPanels(visible){
+    PANEL_IDS.forEach(id=>{
+        const el = document.getElementById(id);
+        const btn = document.querySelector('#panel-toggles button[data-panel="'+id+'"]');
+        if(el) el.style.display = visible ? '' : 'none';
+        if(btn) btn.classList.toggle('active', visible);
+    });
+    savePanelVisibility();
+}
+function savePanelVisibility(){
+    const state = {};
+    PANEL_IDS.forEach(id=>{
+        const el = document.getElementById(id);
+        if(el) state[id] = el.style.display !== 'none';
+    });
+    try{ localStorage.setItem('panel_visibility', JSON.stringify(state)); }catch(e){}
+}
+function loadPanelVisibility(){
+    let state = {};
+    try{ state = JSON.parse(localStorage.getItem('panel_visibility')||'{}'); }catch(e){}
+    PANEL_IDS.forEach(id=>{
+        const el = document.getElementById(id);
+        const btn = document.querySelector('#panel-toggles button[data-panel="'+id+'"]');
+        if(!el) return;
+        const visible = state.hasOwnProperty(id) ? state[id] : true;
+        el.style.display = visible ? '' : 'none';
+        if(btn) btn.classList.toggle('active', visible);
+    });
+}
+
 window.onload = async () => {
     initChart();
     fetchActiveStepSymbolsAndInit();
     updateEV();
     updateDoubleLabel();
+    onCusumConfig();
+    onHurstConfig();
+    loadPanelVisibility();
 
     /* ── Restaurer stats ── */
     try{
