@@ -437,23 +437,24 @@
     <button class="btn active" id="btn-levels" onclick="toggleLevels()"><span class="btn-dot" style="background:var(--green)"></span>Niveaux</button>
     <button class="btn active" id="btn-autoscroll" onclick="toggleAutoScroll()"><span class="btn-dot" style="background:var(--accent)"></span>Auto-scroll</button>
     <button class="btn" onclick="resetZoom()">↺ Reset</button>
+    <button class="btn active" id="btn-params-toggle" onclick="toggleParamPanel()">⚙ Params</button>
     <div class="vdiv"></div>
-    <div class="param-panel">
-        <div class="param-section">
+    <div class="param-panel" id="param-panel">
+        <div class="param-section" id="param-sar">
             <span class="param-badge badge-sar">SAR</span>
             <div class="param-row"><span class="param-lbl">Step</span><input class="param-input wide" type="number" id="sar-step" value="0.02" step="0.005" min="0.001" onchange="onParamsChanged()"></div>
             <div class="param-row"><span class="param-lbl">Max</span><input class="param-input wide" type="number" id="sar-max" value="0.2" step="0.01" min="0.01" onchange="onParamsChanged()"></div>
         </div>
-        <div class="param-section">
+        <div class="param-section" id="param-frc">
             <span class="param-badge badge-frc">FRACTAL</span>
             <div class="param-row"><span class="param-lbl">Voisins</span><input class="param-input" type="number" id="fractal-period" value="2" step="1" min="1" max="10" onchange="onParamsChanged()"></div>
         </div>
-        <div class="param-section">
+        <div class="param-section" id="param-st">
             <span class="param-badge badge-st">ST</span>
             <div class="param-row"><span class="param-lbl">Période</span><input class="param-input wide" type="number" id="st-period" value="10" step="1" min="2" onchange="onParamsChanged()"></div>
             <div class="param-row"><span class="param-lbl">Mult</span><input class="param-input wide" type="number" id="st-mult" value="3" step="0.5" min="0.5" onchange="onParamsChanged()"></div>
         </div>
-        <div class="param-section">
+        <div class="param-section" id="param-ma" style="display:none;">
             <span class="param-badge badge-ma">MA</span>
             <div class="param-row"><span class="param-lbl">Période</span><input class="param-input wide" type="number" id="ma-period" value="20" step="1" min="2" onchange="onParamsChanged()"></div>
             <div class="param-row"><span class="param-lbl">Type</span>
@@ -1775,11 +1776,19 @@ function calculateFractals(prices,period){
    UI TOGGLES
 ════════════════════════════════════════════ */
 function toggleIndicator(type){
-    if(type==='sar'){showSAR=!showSAR;chart.setDatasetVisibility(1,showSAR);document.getElementById('btn-sar').classList.toggle('active',showSAR);}
-    else if(type==='fractal'){showFractal=!showFractal;chart.setDatasetVisibility(2,showFractal);chart.setDatasetVisibility(3,showFractal);document.getElementById('btn-fractal').classList.toggle('active',showFractal);if(!showFractal)clearPeakLabels();}
-    else if(type==='st'){showST=!showST;chart.setDatasetVisibility(4,showST);chart.setDatasetVisibility(5,showST);document.getElementById('btn-st').classList.toggle('active',showST);}
-    else if(type==='ma'){showMA=!showMA;chart.setDatasetVisibility(6,showMA);document.getElementById('btn-ma').classList.toggle('active',showMA);}
+    if(type==='sar'){showSAR=!showSAR;chart.setDatasetVisibility(1,showSAR);document.getElementById('btn-sar').classList.toggle('active',showSAR);document.getElementById('param-sar').style.display=showSAR?'':'none';}
+    else if(type==='fractal'){showFractal=!showFractal;chart.setDatasetVisibility(2,showFractal);chart.setDatasetVisibility(3,showFractal);document.getElementById('btn-fractal').classList.toggle('active',showFractal);document.getElementById('param-frc').style.display=showFractal?'':'none';if(!showFractal)clearPeakLabels();}
+    else if(type==='st'){showST=!showST;chart.setDatasetVisibility(4,showST);chart.setDatasetVisibility(5,showST);document.getElementById('btn-st').classList.toggle('active',showST);document.getElementById('param-st').style.display=showST?'':'none';}
+    else if(type==='ma'){showMA=!showMA;chart.setDatasetVisibility(6,showMA);document.getElementById('btn-ma').classList.toggle('active',showMA);document.getElementById('param-ma').style.display=showMA?'':'none';}
     chart.update('none');
+}
+function toggleParamPanel(){
+    const panel = document.getElementById('param-panel');
+    const btn = document.getElementById('btn-params-toggle');
+    const nowHidden = panel.style.display !== 'none';
+    panel.style.display = nowHidden ? 'none' : '';
+    btn.classList.toggle('active', !nowHidden);
+    try{ localStorage.setItem('param_panel_visible', nowHidden ? '0' : '1'); }catch(e){}
 }
 function toggleLevels(){
     showLevels=!showLevels;
@@ -2670,6 +2679,13 @@ window.onload = async () => {
     onCusumConfig();
     onHurstConfig();
     loadPanelVisibility();
+    try{
+        const savedParams = localStorage.getItem('param_panel_visible');
+        if(savedParams === '0'){
+            document.getElementById('param-panel').style.display = 'none';
+            document.getElementById('btn-params-toggle').classList.remove('active');
+        }
+    }catch(e){}
     try{
         const saved = localStorage.getItem('autoscroll_enabled');
         if(saved !== null){
