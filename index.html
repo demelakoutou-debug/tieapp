@@ -398,6 +398,36 @@
         .tie-info-lbl { font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; white-space:nowrap; }
         .tie-info-val { font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700; }
 
+        /* ── Payout Simulator (Heure de fin) ── */
+        #payout-sim-bar {
+            background: #0d1120;
+            border-bottom: 1px solid var(--border);
+            padding: 6px 16px;
+            display: flex; align-items: center; gap: 10px;
+            flex-shrink: 0; overflow-x: auto;
+        }
+        #payout-sim-bar::-webkit-scrollbar { height: 0; }
+        .ps-title { font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700; color:var(--accent); white-space:nowrap; }
+        .ps-sep { width:1px; height:26px; background:var(--border); flex-shrink:0; }
+        .ps-sequence { display:flex; gap:3px; align-items:center; flex-shrink:0; }
+        .ps-chip {
+            display:flex; flex-direction:column; align-items:center; justify-content:center;
+            width:26px; height:30px; border-radius:5px; flex-shrink:0;
+            font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700;
+            border:1px solid transparent; transition: opacity .2s;
+        }
+        .ps-chip.comp { background:rgba(0,200,150,.18); border-color:rgba(0,200,150,.5); color:var(--green); }
+        .ps-chip.std  { background:rgba(255,77,106,.18); border-color:rgba(255,77,106,.5); color:var(--red); }
+        .ps-chip .ps-arrow { font-size:10px; line-height:1; }
+        .ps-current {
+            display:flex; align-items:center; gap:6px; padding:4px 12px; border-radius:6px;
+            font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700;
+            border:1px solid transparent; white-space:nowrap; flex-shrink:0;
+        }
+        .ps-current.comp { background:rgba(0,200,150,.15); color:var(--green); border-color:rgba(0,200,150,.4); }
+        .ps-current.std  { background:rgba(255,77,106,.15); color:var(--red); border-color:rgba(255,77,106,.4); }
+        .ps-legend { font-size:9px; color:var(--muted); white-space:nowrap; }
+
         /* ── EV Bar collapse ── */
         #ev-bar { transition: padding .2s, min-height .2s; overflow: hidden; }
         #ev-bar.collapsed { padding-top: 0; padding-bottom: 0; height: 28px; min-height: 28px; }
@@ -489,6 +519,7 @@
     <button class="btn active" data-panel="cusum-hurst-bar" onclick="togglePanelVisibility('cusum-hurst-bar', this)">CUSUM/Hurst</button>
     <button class="btn active" data-panel="stats-bar" onclick="togglePanelVisibility('stats-bar', this)">Stats</button>
     <button class="btn active" data-panel="tie-bar" onclick="togglePanelVisibility('tie-bar', this)">Tie Predictor</button>
+    <button class="btn active" data-panel="payout-sim-bar" onclick="togglePanelVisibility('payout-sim-bar', this)">Simulateur Payout</button>
     <div class="pt-spacer">
         <button class="btn" onclick="setAllPanels(true)">Tout afficher</button>
         <button class="btn" onclick="setAllPanels(false)">Tout masquer</button>
@@ -812,6 +843,17 @@
         <span class="tie-info-lbl">Contexte actuel (4 ticks)</span>
         <span class="tie-info-val" id="tp-context" style="color:var(--accent);font-size:12px;">—</span>
     </div>
+</div>
+
+<!-- ═══ PAYOUT SIMULATOR (Heure de fin) ═══ -->
+<div id="payout-sim-bar">
+    <span class="ps-title">🎯 Simulateur Payout (durée = Heure de fin)</span>
+    <div class="ps-sep"></div>
+    <span class="ps-legend">🟢 Compensation (tie) &nbsp;|&nbsp; 🔴 Standard</span>
+    <div class="ps-sep"></div>
+    <div class="ps-current std" id="ps-current">🔴 STANDARD</div>
+    <div class="ps-sep"></div>
+    <div class="ps-sequence" id="ps-sequence"></div>
 </div>
 
 <!-- ═══ CHART ═══ -->
@@ -1556,6 +1598,7 @@ function processNewTick(tick){
         addMarkovPrice(p);
         addMarkovTick(dir);
         addCusumTick(dir);
+        addPayoutSimTick(dir);
         updateHurstDisplay(false);
         tpUpdate();
     }
@@ -2531,6 +2574,53 @@ function patToArrows(pat) {
 }
 
 /* ════════════════════════════════════════════
+   SIMULATEUR PAYOUT — Durée "Heure de fin"
+   ─────────────────────────────────────────
+   Sur Deriv, en mode "Heure de fin" (par opposition à une durée fixe en
+   ticks/secondes), le nombre de ticks restants avant l'expiration du
+   contrat diminue de 1 à CHAQUE tick qui passe. Or :
+     - reste IMPAIR de ticks → tie impossible → payout STANDARD
+     - reste PAIR de ticks   → tie possible   → payout COMPENSATION (élevé)
+   Comme ce compte restant diminue de 1 à chaque tick, sa parité s'inverse
+   nécessairement à CHAQUE tick — indépendamment du sens du prix (hausse
+   ou baisse). C'est une simulation pure de ce mécanisme d'alternance,
+   sans calcul ni affichage du payout réel — juste l'indicateur visuel.
+════════════════════════════════════════════ */
+let psParity = 0; // 0 = pair (compensation), 1 = impair (standard) — phase arbitraire
+let psHistory = []; // {dir:'U'|'D', mode:'comp'|'std'}
+const PS_MAX_CHIPS = 40;
+
+function addPayoutSimTick(direction){
+    const mode = (psParity % 2 === 0) ? 'comp' : 'std';
+    psParity++;
+    psHistory.push({dir:direction, mode});
+    if(psHistory.length > PS_MAX_CHIPS) psHistory.shift();
+    renderPayoutSim();
+}
+function renderPayoutSim(){
+    const seqEl = document.getElementById('ps-sequence');
+    const curEl = document.getElementById('ps-current');
+    if(!seqEl || !curEl) return;
+    seqEl.innerHTML = psHistory.map(h=>{
+        const arrow = h.dir==='U' ? '▲' : '▼';
+        return '<div class="ps-chip '+h.mode+'"><span class="ps-arrow">'+arrow+'</span><span>'+(h.mode==='comp'?'🟢':'🔴')+'</span></div>';
+    }).join('');
+    seqEl.scrollLeft = seqEl.scrollWidth;
+    if(psHistory.length){
+        const last = psHistory[psHistory.length-1];
+        curEl.className = 'ps-current ' + last.mode;
+        curEl.innerText = last.mode==='comp' ? '🟢 COMPENSATION (tie)' : '🔴 STANDARD';
+    } else {
+        curEl.className = 'ps-current std';
+        curEl.innerText = '🔴 STANDARD';
+    }
+}
+function resetPayoutSim(){
+    psParity = 0; psHistory = [];
+    renderPayoutSim();
+}
+
+/* ════════════════════════════════════════════
    CALCULATEUR D'ESPÉRANCE
 ════════════════════════════════════════════ */
 function computePTie(n){
@@ -2607,6 +2697,7 @@ document.getElementById('market-select').addEventListener('change',e=>{
     tpResetState();
     resetCusumState();
     resetHurstState();
+    resetPayoutSim();
     mkSigTotal=0; mkSigWin=0;
     document.getElementById('mk-signal').className='mk-signal neut';
     document.getElementById('mk-signal').innerText='— attente';
@@ -2632,7 +2723,7 @@ function toggleEVBar(){
    L'état choisi est mémorisé (localStorage) et réappliqué
    au rechargement de la page.
 ════════════════════════════════════════════ */
-const PANEL_IDS = ['trade-bar','ev-bar','markov-bar','cusum-hurst-bar','stats-bar','tie-bar'];
+const PANEL_IDS = ['trade-bar','ev-bar','markov-bar','cusum-hurst-bar','stats-bar','tie-bar','payout-sim-bar'];
 function togglePanelVisibility(panelId, btnEl){
     const el = document.getElementById(panelId);
     if(!el) return;
