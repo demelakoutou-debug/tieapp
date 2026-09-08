@@ -55,6 +55,7 @@
         .badge-sar { background:rgba(255,170,64,.15); color:var(--orange); }
         .badge-frc { background:rgba(180,122,255,.15); color:var(--purple); }
         .badge-ma  { background:rgba(77,208,225,.15); color:#4dd0e1; }
+        .badge-renko { background:rgba(255,209,102,.15); color:#ffd166; }
         .param-row { display:flex; align-items:center; gap:5px; }
         .param-lbl { color:var(--muted); font-size:10px; white-space:nowrap; }
         .param-input { width:54px; background:var(--bg); border:1px solid var(--border2); color:#fff;
@@ -269,15 +270,15 @@
         .mk-matrix-cell.strong { color: var(--green); border-color: rgba(0,200,150,.3); }
         .mk-matrix-cell.weak   { color: var(--red);   border-color: rgba(255,77,106,.3); }
 
-        /* ── CUSUM & Hurst Bar ── */
-        #cusum-hurst-bar {
+        /* ── Entropy Bar (styles .ch-* réutilisés de l'ancien CUSUM/Hurst) ── */
+        #entropy-bar {
             background: var(--surface);
             border-bottom: 1px solid var(--border);
             padding: 6px 16px;
             display: flex; align-items: center; gap: 12px;
             flex-shrink: 0; overflow-x: auto;
         }
-        #cusum-hurst-bar::-webkit-scrollbar { height: 0; }
+        #entropy-bar::-webkit-scrollbar { height: 0; }
         .ch-section { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
         .ch-lbl { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; white-space: nowrap; }
         .ch-val { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; white-space: nowrap; }
@@ -468,6 +469,7 @@
     <button class="btn active" id="btn-autoscroll" onclick="toggleAutoScroll()"><span class="btn-dot" style="background:var(--accent)"></span>Auto-scroll</button>
     <button class="btn" onclick="resetZoom()">↺ Reset</button>
     <button class="btn active" id="btn-params-toggle" onclick="toggleParamPanel()">⚙ Params</button>
+    <button class="btn" id="btn-chart-mode" onclick="toggleChartMode()">📊 Vue: Zigzag</button>
     <div class="vdiv"></div>
     <div class="param-panel" id="param-panel">
         <div class="param-section" id="param-sar">
@@ -494,6 +496,10 @@
                 </select>
             </div>
         </div>
+        <div class="param-section" id="param-renko" style="display:none;">
+            <span class="param-badge badge-renko">RENKO</span>
+            <div class="param-row"><span class="param-lbl">Brique</span><input class="param-input wide" type="number" id="renko-brick" value="1" step="0.1" min="0.1" onchange="onParamsChanged()"></div>
+        </div>
     </div>
     <div class="header-right">
         <div class="stat-block"><span class="stat-lbl">Max</span><span class="stat-val val-high" id="stat-high">—</span></div>
@@ -516,7 +522,7 @@
     <button class="btn active" data-panel="trade-bar" onclick="togglePanelVisibility('trade-bar', this)">Trading</button>
     <button class="btn active" data-panel="ev-bar" onclick="togglePanelVisibility('ev-bar', this)">Espérance</button>
     <button class="btn active" data-panel="markov-bar" onclick="togglePanelVisibility('markov-bar', this)">Markov</button>
-    <button class="btn active" data-panel="cusum-hurst-bar" onclick="togglePanelVisibility('cusum-hurst-bar', this)">CUSUM/Hurst</button>
+    <button class="btn active" data-panel="entropy-bar" onclick="togglePanelVisibility('entropy-bar', this)">Entropie</button>
     <button class="btn active" data-panel="stats-bar" onclick="togglePanelVisibility('stats-bar', this)">Stats</button>
     <button class="btn active" data-panel="tie-bar" onclick="togglePanelVisibility('tie-bar', this)">Tie Predictor</button>
     <button class="btn active" data-panel="payout-sim-bar" onclick="togglePanelVisibility('payout-sim-bar', this)">Simulateur Payout</button>
@@ -718,60 +724,44 @@
     </div>
 </div>
 
-<!-- ═══ CUSUM & HURST BAR ═══ -->
-<div id="cusum-hurst-bar">
+<!-- ═══ ENTROPIE DE SHANNON GLISSANTE ═══ -->
+<div id="entropy-bar">
     <div class="ch-section">
-        <span class="ch-lbl" style="color:var(--accent);font-weight:700;">⚡ CUSUM</span>
+        <span class="ch-lbl" style="color:var(--purple);font-weight:700;">🎲 Entropie de Shannon</span>
     </div>
     <div class="ch-sep"></div>
-    <div class="ch-section">
-        <span class="ch-lbl">Sensib. (k)</span>
-        <input class="ch-input" id="cusum-k" type="number" value="0.15" min="0.01" max="1" step="0.01" oninput="onCusumConfig()">
-    </div>
-    <div class="ch-section">
-        <span class="ch-lbl">Seuil (h)</span>
-        <input class="ch-input" id="cusum-h" type="number" value="5" min="1" max="50" step="0.5" oninput="onCusumConfig()">
-    </div>
-    <div class="ch-sep"></div>
-    <div class="ch-section">
-        <span class="ch-lbl">S+</span>
-        <div class="ch-bar-track"><div class="ch-bar-fill sp" id="cusum-splus-bar" style="width:0%"></div></div>
-        <span class="ch-val" id="cusum-splus-val" style="color:var(--green)">0.00</span>
-    </div>
-    <div class="ch-section">
-        <span class="ch-lbl">S-</span>
-        <div class="ch-bar-track"><div class="ch-bar-fill sm" id="cusum-sminus-bar" style="width:0%"></div></div>
-        <span class="ch-val" id="cusum-sminus-val" style="color:var(--red)">0.00</span>
-    </div>
-    <div class="ch-sep"></div>
-    <div class="ch-section">
-        <span class="ch-lbl">Rupture</span>
-        <div class="ch-signal neut" id="cusum-signal">— attente</div>
-    </div>
-    <div class="ch-section">
-        <span class="ch-lbl">Signaux</span>
-        <span class="ch-val" id="cusum-count" style="color:var(--muted)">0</span>
-    </div>
-    <div class="ch-sep"></div>
-    <div class="ch-section">
-        <span class="ch-lbl" style="color:var(--purple);font-weight:700;">〰 Hurst glissant</span>
-    </div>
     <div class="ch-section">
         <span class="ch-lbl">Fenêtre</span>
-        <input class="ch-input" id="hurst-window" type="number" value="300" min="50" max="1000" step="10" oninput="onHurstConfig()">
+        <input class="ch-input" id="entropy-window" type="number" value="200" min="30" max="1000" step="10" oninput="onEntropyConfig()">
     </div>
     <div class="ch-section">
-        <span class="ch-lbl">Anti-pers. 0 ─ 0.5 ─ 1 Persist.</span>
-        <div class="ch-hurst-track"><div class="ch-hurst-marker" id="hurst-marker" style="left:50%"></div></div>
-        <span class="ch-val" id="hurst-val" style="color:var(--muted)">—</span>
+        <span class="ch-lbl">Longueur motif</span>
+        <input class="ch-input" id="entropy-length" type="number" value="3" min="1" max="5" step="1" oninput="onEntropyConfig()">
+    </div>
+    <div class="ch-sep"></div>
+    <div class="ch-section" style="gap:8px;">
+        <div>
+            <span class="ch-lbl">Patterné 0 ─ 0.5 ─ 1 Bruit</span>
+            <div class="ch-hurst-track"><div class="ch-hurst-marker" id="entropy-marker" style="left:100%"></div></div>
+        </div>
+        <span class="ch-val" id="entropy-val" style="color:var(--muted)">—</span>
     </div>
     <div class="ch-sep"></div>
     <div class="ch-section">
         <span class="ch-lbl">Régime</span>
-        <div class="ch-signal neut" id="hurst-regime">— collecte…</div>
+        <div class="ch-signal neut" id="entropy-regime">— collecte…</div>
     </div>
     <div class="ch-sep"></div>
-    <span style="font-size:9px;color:var(--muted);max-width:280px;line-height:1.3;" id="hurst-advice">Collecte des données en cours pour évaluer la fiabilité du SuperTrend dans ce régime.</span>
+    <div class="ch-section">
+        <span class="ch-lbl">Motifs distincts</span>
+        <span class="ch-val" id="entropy-distinct" style="color:var(--muted)">0</span>
+    </div>
+    <div class="ch-section">
+        <span class="ch-lbl">Motif dominant</span>
+        <span class="ch-val" id="entropy-top-pattern" style="color:var(--accent)">—</span>
+    </div>
+    <div class="ch-sep"></div>
+    <span style="font-size:9px;color:var(--muted);max-width:280px;line-height:1.3;" id="entropy-advice">Collecte des données en cours pour évaluer la fiabilité du SuperTrend dans ce contexte.</span>
 </div>
 
 <!-- ═══ STATS BAR ═══ -->
@@ -860,6 +850,7 @@
 <div id="chart-wrap">
     <div id="chart-container">
         <canvas id="cryptoChart"></canvas>
+        <canvas id="renkoCanvas" style="display:none;"></canvas>
         <div id="chart-labels">
             <div class="price-hline hline-high" id="hline-high"></div>
             <div class="price-hline hline-low"  id="hline-low"></div>
@@ -868,7 +859,7 @@
             <div class="price-badge" id="badge-low" ><div class="badge-tag" id="btag-low">—</div></div>
             <div class="price-badge" id="badge-curr"><div class="badge-tag" id="btag-curr">—</div></div>
         </div>
-        <div class="hint">
+        <div class="hint" id="chart-hint">
             <span><span class="hkey">Scroll</span>Zoom X</span>
             <span><span class="hkey">Drag</span>Déplacer</span>
             <span><span class="hkey">↕ Axe Y</span>Étirer</span>
@@ -1422,11 +1413,103 @@ function initChart(){
 }
 
 /* ════════════════════════════════════════════
+   GRAPHIQUE RENKO — vue alternative, basculable
+   ─────────────────────────────────────────
+   Contrairement au graphique "zigzag" (un point par tick, axe du temps),
+   le Renko ignore le temps : une nouvelle "brique" n'apparaît que quand
+   le prix a bougé d'au moins une taille de brique fixe dans une
+   direction. Ça filtre tout le bruit tick-à-tick et ne montre que les
+   vrais changements de direction — particulièrement adapté à un Step
+   Index puisque le marché bouge déjà par paliers fixes.
+   Rendu via un second canvas (Chart.js type 'bar', barres flottantes
+   [prix_bas, prix_haut] colorées vert/rouge selon la direction de la
+   brique), affiché à la place du graphique zigzag quand la vue Renko
+   est active — le zigzag continue d'exister et reste immédiatement
+   disponible en rebasculant.
+════════════════════════════════════════════ */
+let chartMode = 'zigzag'; // 'zigzag' | 'renko'
+let renkoChart = null;
+
+function toggleChartMode(){
+    chartMode = chartMode === 'zigzag' ? 'renko' : 'zigzag';
+    const btn = document.getElementById('btn-chart-mode');
+    document.getElementById('cryptoChart').style.display   = chartMode==='zigzag' ? '' : 'none';
+    document.getElementById('renkoCanvas').style.display   = chartMode==='renko'  ? '' : 'none';
+    document.getElementById('chart-labels').style.display  = chartMode==='zigzag' ? '' : 'none';
+    document.getElementById('chart-hint').style.display    = chartMode==='zigzag' ? '' : 'none';
+    document.getElementById('y-drag-zone').style.display   = chartMode==='zigzag' ? '' : 'none';
+    document.getElementById('param-renko').style.display   = chartMode==='renko'  ? '' : 'none';
+    btn.innerText = chartMode==='zigzag' ? '📊 Vue: Zigzag' : '🧱 Vue: Renko';
+    btn.classList.toggle('active', chartMode==='renko');
+    if(chartMode==='renko'){
+        initRenkoChartIfNeeded();
+        updateRenkoChart();
+    }
+}
+function initRenkoChartIfNeeded(){
+    if(renkoChart) return;
+    const ctx = document.getElementById('renkoCanvas').getContext('2d');
+    renkoChart = new Chart(ctx,{
+        type:'bar',
+        data:{ labels:[], datasets:[{
+            label:'Renko', data:[], backgroundColor:[], borderColor:[],
+            borderWidth:1, barPercentage:0.85, categoryPercentage:0.9
+        }]},
+        options:{
+            responsive:true, maintainAspectRatio:false, animation:false,
+            scales:{
+                x:{ grid:{color:'rgba(37,42,58,.9)'}, ticks:{display:false}, border:{color:'#252a3a'} },
+                y:{ position:'right', grid:{color:'rgba(37,42,58,.9)'}, ticks:{color:'#5a6480',font:{family:'JetBrains Mono',size:10},callback:v=>fmt1(v)}, border:{color:'#252a3a'} }
+            },
+            plugins:{ legend:{display:false}, tooltip:{enabled:false} }
+        }
+    });
+}
+function calculateRenko(prices, brickSize){
+    const bricks=[];
+    if(!prices.length || brickSize<=0) return bricks;
+    let base=prices[0];
+    for(let i=1;i<prices.length;i++){
+        let diff=prices[i]-base;
+        while(Math.abs(diff) >= brickSize){
+            const dir = diff>0 ? 1 : -1;
+            const newBase = base + dir*brickSize;
+            bricks.push({from:base, to:newBase, dir});
+            base = newBase;
+            diff = prices[i]-base;
+        }
+    }
+    return bricks;
+}
+const RENKO_SOURCE_CAP = 3000; // ticks source max pour le calcul (perf)
+const RENKO_DISPLAY_CAP = 150; // briques affichées max (lisibilité)
+function updateRenkoChart(){
+    if(!renkoChart) return;
+    const brickSize = parseFloat(document.getElementById('renko-brick').value) || 1;
+    const source = ticksData.prices.slice(-RENKO_SOURCE_CAP);
+    const bricks = calculateRenko(source, brickSize).slice(-RENKO_DISPLAY_CAP);
+    renkoChart.data.labels = bricks.map((_,i)=>i+1);
+    renkoChart.data.datasets[0].data = bricks.map(b=>[Math.min(b.from,b.to), Math.max(b.from,b.to)]);
+    renkoChart.data.datasets[0].backgroundColor = bricks.map(b=> b.dir>0 ? 'rgba(0,200,150,.55)' : 'rgba(255,77,106,.55)');
+    renkoChart.data.datasets[0].borderColor = bricks.map(b=> b.dir>0 ? '#00c896' : '#ff4d6a');
+    renkoChart.update('none');
+}
+function resetRenkoState(){
+    if(renkoChart){
+        renkoChart.data.labels=[];
+        renkoChart.data.datasets[0].data=[];
+        renkoChart.data.datasets[0].backgroundColor=[];
+        renkoChart.data.datasets[0].borderColor=[];
+        renkoChart.update('none');
+    }
+}
+
+/* ════════════════════════════════════════════
    Y-AXIS DRAG
 ════════════════════════════════════════════ */
 let yDrag={active:false,startY:0,startMin:0,startMax:0,range:0};
 document.getElementById('y-drag-zone').addEventListener('mousedown',e=>{
-    if(!chart||!ticksData.prices.length)return;
+    if(chartMode!=='zigzag'||!chart||!ticksData.prices.length)return;
     const ys=chart.scales.y;
     yDrag={active:true,startY:e.clientY,startMin:ys.min,startMax:ys.max,range:ys.max-ys.min};
     document.getElementById('y-drag-zone').classList.add('dragging');
@@ -1577,6 +1660,7 @@ function processHistory(h){
     chart.scales.y.options.max=undefined;
     updateStatDisplay();
     updateChartData(true);
+    if(chartMode==='renko') updateRenkoChart();
 }
 let _lastTickEpoch = 0;
 function processNewTick(tick){
@@ -1597,9 +1681,8 @@ function processNewTick(tick){
         const dir = p >= prev ? 'U' : 'D';
         addMarkovPrice(p);
         addMarkovTick(dir);
-        addCusumTick(dir);
         addPayoutSimTick(dir);
-        updateHurstDisplay(false);
+        updateEntropyDisplay(false);
         tpUpdate();
     }
     const el = document.getElementById('last-price');
@@ -1608,6 +1691,7 @@ function processNewTick(tick){
     updateStatDisplay();
     const atEnd = !chart || chart.scales.x.max >= chart.data.labels.length-(RIGHT_PAD+10);
     updateChartData(atEnd);
+    if(chartMode==='renko') updateRenkoChart();
 }
 function updateStatDisplay(){
     document.getElementById('stat-high').innerText=sessionHigh!=null?fmt1(sessionHigh):'—';
@@ -1861,7 +1945,7 @@ function toggleAutoScroll(){
     /* En réactivant, on revient immédiatement sur le tick le plus récent */
     if(autoScrollEnabled) scrollToEnd(true);
 }
-function onParamsChanged(){updateChartData(false);}
+function onParamsChanged(){updateChartData(false);if(chartMode==='renko')updateRenkoChart();}
 let lTimer=null;
 function debounceLines(){clearTimeout(lTimer);lTimer=setTimeout(()=>{updatePriceLines();drawPeakLabels();},50);}
 window.addEventListener('wheel',debounceLines,{passive:true});
@@ -2313,157 +2397,110 @@ function queueSignal(dir){
 }
 
 /* ════════════════════════════════════════════
-   CUSUM — Détecteur de rupture (changement de régime)
+   ENTROPIE DE SHANNON GLISSANTE — sur la séquence de directions
    ─────────────────────────────────────────
-   Contrairement aux moyennes/indicateurs de volatilité (ATR, Bollinger...)
-   qui dégénèrent sur un Step Index (chaque tick a une amplitude fixe), le
-   CUSUM travaille sur la DIRECTION des ticks (+1/-1), qui elle varie
-   vraiment. Il accumule l'écart entre le taux de hausses observé et 50%
-   (marché équilibré) ; dès que cet écart cumulé dépasse un seuil, ça
-   signale un changement de régime — souvent plus tôt qu'une chaîne de
-   Markov classique. Formule standard du CUSUM à deux bornes (contrôle de
-   processus statistique) :
-     S+ = max(0, S+_prev + (x - k))
-     S- = max(0, S-_prev + (-x - k))
-   où x = +1 (tick haussier) ou -1 (tick baissier), k = seuil de tolérance
-   (slack). Signal quand S+ ou S- dépasse le seuil h.
+   Mesure à quel point la séquence récente de ticks ▲▼ est prévisible
+   (patternée) ou au contraire proche du bruit pur. On découpe la fenêtre
+   glissante en motifs de longueur L (ex: "UUD", "UDU"...), on compte la
+   fréquence de chaque motif observé, puis on calcule l'entropie de
+   Shannon de cette distribution :
+     H = -Σ p_i·log2(p_i)
+   normalisée entre 0 et 1 (H / L, puisque log2(2^L) = L bits) :
+     - proche de 0 → quelques motifs dominent largement → séquence
+       patternée / répétitive (bon contexte pour Markov/SuperTrend)
+     - proche de 1 → tous les motifs sont quasi équiprobables → bruit
+       pur, aucune structure exploitable
+   Recalcul throttlé (tous les N ticks) car c'est un indicateur de
+   contexte lent, pas un signal tick-précis.
 ════════════════════════════════════════════ */
-let cusumK = 0.15, cusumH = 5;
-let cusumSPlus = 0, cusumSMinus = 0;
-let cusumSignalCount = 0;
+let entropyWindow = 200;
+let entropyLength = 3;
+let _entropyTickCounter = 0;
+const ENTROPY_RECOMPUTE_EVERY = 5;
 
-function onCusumConfig(){
-    cusumK = parseFloat(document.getElementById('cusum-k').value) || 0.15;
-    cusumH = parseFloat(document.getElementById('cusum-h').value) || 5;
+function onEntropyConfig(){
+    entropyWindow = parseInt(document.getElementById('entropy-window').value) || 200;
+    entropyLength = parseInt(document.getElementById('entropy-length').value) || 3;
+    updateEntropyDisplay(true);
 }
-function resetCusumState(){
-    cusumSPlus = 0; cusumSMinus = 0; cusumSignalCount = 0;
-    document.getElementById('cusum-signal').className = 'ch-signal neut';
-    document.getElementById('cusum-signal').innerText = '— attente';
-    document.getElementById('cusum-count').innerText = '0';
-    updateCusumDisplay(null, true);
+function computeShannonEntropy(sequence, L){
+    const n = sequence.length;
+    if(n < L+10) return null;
+    const counts = {};
+    let total = 0;
+    for(let i=0;i+L<=n;i++){
+        const pattern = sequence.slice(i,i+L).join('');
+        counts[pattern] = (counts[pattern]||0)+1;
+        total++;
+    }
+    if(total===0) return null;
+    let H = 0;
+    let topPattern = null, topCount = 0;
+    Object.entries(counts).forEach(([pat,c])=>{
+        const p = c/total;
+        H -= p*Math.log2(p);
+        if(c>topCount){ topCount=c; topPattern=pat; }
+    });
+    const maxH = L; // bits — log2(2^L) motifs possibles
+    return {
+        normalized: Math.max(0, Math.min(1, H/maxH)),
+        distinctPatterns: Object.keys(counts).length,
+        topPattern, topCount, total
+    };
 }
-function addCusumTick(direction){
-    const x = direction === 'U' ? 1 : -1;
-    cusumSPlus  = Math.max(0, cusumSPlus  + (x  - cusumK));
-    cusumSMinus = Math.max(0, cusumSMinus + (-x - cusumK));
-    let signal = null;
-    if(cusumSPlus > cusumH){ signal = 'bull'; cusumSPlus = 0; cusumSMinus = 0; }
-    else if(cusumSMinus > cusumH){ signal = 'bear'; cusumSPlus = 0; cusumSMinus = 0; }
-    updateCusumDisplay(signal, false);
+function resetEntropyState(){
+    _entropyTickCounter = 0;
+    document.getElementById('entropy-val').innerText = '—';
+    document.getElementById('entropy-val').style.color = 'var(--muted)';
+    document.getElementById('entropy-marker').style.left = '100%';
+    const regEl = document.getElementById('entropy-regime');
+    regEl.className = 'ch-signal neut'; regEl.innerText = '— collecte…';
+    document.getElementById('entropy-distinct').innerText = '0';
+    document.getElementById('entropy-top-pattern').innerText = '—';
+    document.getElementById('entropy-advice').innerText = 'Collecte des données en cours pour évaluer la fiabilité du SuperTrend dans ce contexte.';
 }
-function updateCusumDisplay(signal, silent){
-    const spPct = Math.min(100, (cusumSPlus  / cusumH) * 100);
-    const smPct = Math.min(100, (cusumSMinus / cusumH) * 100);
-    document.getElementById('cusum-splus-bar').style.width  = spPct.toFixed(0)+'%';
-    document.getElementById('cusum-sminus-bar').style.width = smPct.toFixed(0)+'%';
-    document.getElementById('cusum-splus-val').innerText  = cusumSPlus.toFixed(2);
-    document.getElementById('cusum-sminus-val').innerText = cusumSMinus.toFixed(2);
-    if(silent) return;
-    if(signal){
-        cusumSignalCount++;
-        document.getElementById('cusum-count').innerText = cusumSignalCount;
-        const sigEl = document.getElementById('cusum-signal');
-        if(signal==='bull'){ sigEl.className='ch-signal bull'; sigEl.innerText='▲ RUPTURE HAUSSIÈRE'; }
-        else{ sigEl.className='ch-signal bear'; sigEl.innerText='▼ RUPTURE BAISSIÈRE'; }
+function updateEntropyDisplay(force){
+    _entropyTickCounter++;
+    if(!force && (_entropyTickCounter % ENTROPY_RECOMPUTE_EVERY !== 0)) return;
+    const seq = mkHistory;
+    if(seq.length < Math.max(30, entropyWindow/2)){
+        document.getElementById('entropy-val').innerText = '⏳ '+seq.length;
+        return;
+    }
+    const winStart = Math.max(0, seq.length - entropyWindow);
+    const result = computeShannonEntropy(seq.slice(winStart), entropyLength);
+    if(result===null) return;
+    const H = result.normalized;
+    const valEl = document.getElementById('entropy-val');
+    valEl.innerText = H.toFixed(3);
+    document.getElementById('entropy-marker').style.left = (H*100).toFixed(1)+'%';
+    document.getElementById('entropy-distinct').innerText = result.distinctPatterns + ' / ' + Math.pow(2,entropyLength);
+    document.getElementById('entropy-top-pattern').innerText = result.topPattern
+        ? patToArrows(result.topPattern) + ' (' + (result.topCount/result.total*100).toFixed(0) + '%)'
+        : '—';
+    const regEl = document.getElementById('entropy-regime');
+    const adviceEl = document.getElementById('entropy-advice');
+    if(H < 0.4){
+        valEl.style.color = 'var(--green)';
+        regEl.className = 'ch-signal trend';
+        regEl.innerText = '◆ Patternée (faible entropie)';
+        adviceEl.innerText = showST
+            ? '✓ Séquence structurée — les signaux SuperTrend/Markov sont probablement plus fiables ici.'
+            : 'Séquence structurée — bon contexte pour un signal directionnel si activé.';
+    } else if(H > 0.75){
+        valEl.style.color = 'var(--orange)';
+        regEl.className = 'ch-signal mean';
+        regEl.innerText = '▦ Bruit pur (entropie élevée)';
+        adviceEl.innerText = 'Séquence proche du hasard — prudence, quel que soit l\'indicateur utilisé.';
+    } else {
+        valEl.style.color = 'var(--muted)';
+        regEl.className = 'ch-signal neut';
+        regEl.innerText = '— Modérée';
+        adviceEl.innerText = 'Structure partielle — signaux à confirmer avec un autre indicateur.';
     }
 }
 
 /* ════════════════════════════════════════════
-   EXPOSANT DE HURST GLISSANT (régime du marché)
-   ─────────────────────────────────────────
-   Mesure si la série se comporte comme un vrai mouvement aléatoire
-   (H≈0.5), en tendance persistante (H>0.5, les hausses suivent les
-   hausses — bon contexte pour le SuperTrend) ou anti-persistante /
-   retour-à-la-moyenne (H<0.5, le SuperTrend risque le whipsaw).
-   Méthode utilisée : exposant de Hurst généralisé par fonction de
-   structure — pour plusieurs décalages τ (lags), on mesure l'amplitude
-   moyenne des variations de prix sur ce décalage, puis on régresse
-   log(amplitude) contre log(τ) ; la pente de cette régression est H.
-   Moins coûteux qu'un R/S classique tout en restant un indicateur reconnu.
-════════════════════════════════════════════ */
-let hurstWindow = 300;
-let hurstCurrentValue = null;
-let _hurstTickCounter = 0;
-const HURST_RECOMPUTE_EVERY = 5; // ticks — indicateur de régime lent, pas besoin de recalcul à chaque tick
-
-function onHurstConfig(){
-    hurstWindow = parseInt(document.getElementById('hurst-window').value) || 300;
-    updateHurstDisplay(true);
-}
-function computeHurstGHE(prices){
-    const n = prices.length;
-    const maxLag = Math.floor(n/4);
-    const lags = [2,4,8,16,32,64,128,256].filter(t=>t < maxLag);
-    if(lags.length < 2) return null;
-    const logPairs = [];
-    for(const tau of lags){
-        let sum=0, count=0;
-        for(let i=0;i+tau<n;i++){
-            sum += Math.abs(prices[i+tau]-prices[i]);
-            count++;
-        }
-        if(count>0){
-            const meanAbs = sum/count;
-            if(meanAbs>0) logPairs.push([Math.log(tau), Math.log(meanAbs)]);
-        }
-    }
-    if(logPairs.length < 2) return null;
-    const n2=logPairs.length;
-    let sumX=0,sumY=0,sumXY=0,sumXX=0;
-    for(const [x,y] of logPairs){ sumX+=x; sumY+=y; sumXY+=x*y; sumXX+=x*x; }
-    const denom = n2*sumXX - sumX*sumX;
-    if(denom===0) return null;
-    const slope = (n2*sumXY - sumX*sumY)/denom;
-    return Math.max(0, Math.min(1, slope));
-}
-function resetHurstState(){
-    hurstCurrentValue = null; _hurstTickCounter = 0;
-    document.getElementById('hurst-val').innerText = '—';
-    document.getElementById('hurst-val').style.color = 'var(--muted)';
-    document.getElementById('hurst-marker').style.left = '50%';
-    const regEl = document.getElementById('hurst-regime');
-    regEl.className = 'ch-signal neut'; regEl.innerText = '— collecte…';
-    document.getElementById('hurst-advice').innerText = 'Collecte des données en cours pour évaluer la fiabilité du SuperTrend dans ce régime.';
-}
-function updateHurstDisplay(force){
-    _hurstTickCounter++;
-    if(!force && (_hurstTickCounter % HURST_RECOMPUTE_EVERY !== 0)) return;
-    const prices = mkPrices;
-    if(prices.length < Math.max(60, hurstWindow/2)){
-        document.getElementById('hurst-val').innerText = '⏳ '+prices.length;
-        return;
-    }
-    const winStart = Math.max(0, prices.length - hurstWindow);
-    const H = computeHurstGHE(prices.slice(winStart));
-    if(H===null) return;
-    hurstCurrentValue = H;
-    const valEl = document.getElementById('hurst-val');
-    valEl.innerText = H.toFixed(3);
-    document.getElementById('hurst-marker').style.left = (H*100).toFixed(1)+'%';
-    const regEl = document.getElementById('hurst-regime');
-    const adviceEl = document.getElementById('hurst-advice');
-    if(H > 0.55){
-        valEl.style.color = 'var(--green)';
-        regEl.className = 'ch-signal trend';
-        regEl.innerText = '▲ Persistant (tendanciel)';
-        adviceEl.innerText = showST
-            ? '✓ Bon contexte pour le SuperTrend — le marché tend à poursuivre sa direction.'
-            : 'Régime tendanciel — le SuperTrend serait fiable ici si activé.';
-    } else if(H < 0.45){
-        valEl.style.color = 'var(--orange)';
-        regEl.className = 'ch-signal mean';
-        regEl.innerText = '↔ Anti-persistant (retour à la moyenne)';
-        adviceEl.innerText = showST
-            ? '⚠ SuperTrend peu fiable ici — risque de faux signaux (whipsaw) en régime anti-persistant.'
-            : 'Régime anti-persistant — méfiance si le SuperTrend est activé.';
-    } else {
-        valEl.style.color = 'var(--muted)';
-        regEl.className = 'ch-signal neut';
-        regEl.innerText = '— Aléatoire (bruit)';
-        adviceEl.innerText = 'Régime proche du bruit pur — à trader avec prudence, quel que soit l\'indicateur.';
-    }
-}
 
 /* ════════════════════════════════════════════
    TIE PREDICTOR
@@ -2695,9 +2732,9 @@ document.getElementById('market-select').addEventListener('change',e=>{
     mkPendingSignals=[]; mkLastQueuedAt=-999;
     Object.keys(mkTransitions).forEach(k=>delete mkTransitions[k]);
     tpResetState();
-    resetCusumState();
-    resetHurstState();
+    resetEntropyState();
     resetPayoutSim();
+    resetRenkoState();
     mkSigTotal=0; mkSigWin=0;
     document.getElementById('mk-signal').className='mk-signal neut';
     document.getElementById('mk-signal').innerText='— attente';
@@ -2723,7 +2760,7 @@ function toggleEVBar(){
    L'état choisi est mémorisé (localStorage) et réappliqué
    au rechargement de la page.
 ════════════════════════════════════════════ */
-const PANEL_IDS = ['trade-bar','ev-bar','markov-bar','cusum-hurst-bar','stats-bar','tie-bar','payout-sim-bar'];
+const PANEL_IDS = ['trade-bar','ev-bar','markov-bar','entropy-bar','stats-bar','tie-bar','payout-sim-bar'];
 function togglePanelVisibility(panelId, btnEl){
     const el = document.getElementById(panelId);
     if(!el) return;
@@ -2767,8 +2804,7 @@ window.onload = async () => {
     fetchActiveStepSymbolsAndInit();
     updateEV();
     updateDoubleLabel();
-    onCusumConfig();
-    onHurstConfig();
+    onEntropyConfig();
     loadPanelVisibility();
     try{
         const savedParams = localStorage.getItem('param_panel_visible');
