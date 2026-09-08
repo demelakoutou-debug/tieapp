@@ -843,6 +843,7 @@
     <div class="ps-sep"></div>
     <div class="ps-current std" id="ps-current">🔴 STANDARD</div>
     <div class="ps-sep"></div>
+    <button class="btn active" id="btn-ps-history-toggle" onclick="togglePayoutSimHistory()">👁 Historique</button>
     <div class="ps-sequence" id="ps-sequence"></div>
 </div>
 
@@ -2656,6 +2657,14 @@ function resetPayoutSim(){
     psParity = 0; psHistory = [];
     renderPayoutSim();
 }
+function togglePayoutSimHistory(){
+    const seq = document.getElementById('ps-sequence');
+    const btn = document.getElementById('btn-ps-history-toggle');
+    const nowVisible = seq.style.display !== 'none';
+    seq.style.display = nowVisible ? 'none' : '';
+    btn.classList.toggle('active', !nowVisible);
+    try{ localStorage.setItem('ps_history_visible', nowVisible ? '0' : '1'); }catch(e){}
+}
 
 /* ════════════════════════════════════════════
    CALCULATEUR D'ESPÉRANCE
@@ -2811,6 +2820,13 @@ window.onload = async () => {
         if(savedParams === '0'){
             document.getElementById('param-panel').style.display = 'none';
             document.getElementById('btn-params-toggle').classList.remove('active');
+        }
+    }catch(e){}
+    try{
+        const savedPsHist = localStorage.getItem('ps_history_visible');
+        if(savedPsHist === '0'){
+            document.getElementById('ps-sequence').style.display = 'none';
+            document.getElementById('btn-ps-history-toggle').classList.remove('active');
         }
     }catch(e){}
     try{
