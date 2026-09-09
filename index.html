@@ -498,7 +498,7 @@
         </div>
         <div class="param-section" id="param-renko" style="display:none;">
             <span class="param-badge badge-renko">RENKO</span>
-            <div class="param-row"><span class="param-lbl">Brique</span><input class="param-input wide" type="number" id="renko-brick" value="1" step="0.1" min="0.1" onchange="onParamsChanged()"></div>
+            <div class="param-row"><span class="param-lbl">Brique</span><input class="param-input wide" type="number" id="renko-brick" value="0.3" step="0.1" min="0.1" onchange="onParamsChanged()"></div>
         </div>
     </div>
     <div class="header-right">
@@ -852,6 +852,10 @@
     <div id="chart-container">
         <canvas id="cryptoChart"></canvas>
         <canvas id="renkoCanvas" style="display:none;"></canvas>
+        <div id="renko-empty-msg" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;text-align:center;color:var(--muted);font-size:12px;font-family:'JetBrains Mono',monospace;padding:20px;pointer-events:none;">
+            En attente de suffisamment de mouvement pour former une première brique…<br>
+            <span style="font-size:10px;">Réduis la taille de brique si ça persiste.</span>
+        </div>
         <div id="chart-labels">
             <div class="price-hline hline-high" id="hline-high"></div>
             <div class="price-hline hline-low"  id="hline-low"></div>
@@ -1444,7 +1448,11 @@ function toggleChartMode(){
     btn.classList.toggle('active', chartMode==='renko');
     if(chartMode==='renko'){
         initRenkoChartIfNeeded();
-        updateRenkoChart();
+        /* Le canvas vient de passer de display:none à visible : Chart.js
+           a besoin d'un resize explicite pour recalculer ses dimensions,
+           sinon il peut garder une taille de 0 calculée au moment de sa
+           création (comportement déjà vu sur des canvas masqués/révélés). */
+        requestAnimationFrame(()=>{ if(renkoChart) renkoChart.resize(); updateRenkoChart(); });
     }
 }
 function initRenkoChartIfNeeded(){
@@ -1460,7 +1468,22 @@ function initRenkoChartIfNeeded(){
             responsive:true, maintainAspectRatio:false, animation:false,
             scales:{
                 x:{ grid:{color:'rgba(37,42,58,.9)'}, ticks:{display:false}, border:{color:'#252a3a'} },
-                y:{ position:'right', grid:{color:'rgba(37,42,58,.9)'}, ticks:{color:'#5a6480',font:{family:'JetBrains Mono',size:10},callback:v=>fmt1(v)}, border:{color:'#252a3a'} }
+                y:{
+                    position:'right',
+                    /* ⚠️ FIX PRINCIPAL : Chart.js met beginAtZero:true par
+                       défaut sur l'axe des valeurs pour le type 'bar'. Les
+                       prix d'un Step Index tournent autour de plusieurs
+                       milliers (ex: ~9990), donc avec 0 inclus dans
+                       l'échelle, toutes les briques se retrouvaient
+                       écrasées dans un pixel en haut du graphique —
+                       visuellement invisibles bien que les données soient
+                       correctement calculées. */
+                    beginAtZero:false,
+                    grace:'10%',
+                    grid:{color:'rgba(37,42,58,.9)'},
+                    ticks:{color:'#5a6480',font:{family:'JetBrains Mono',size:10},callback:v=>fmt1(v)},
+                    border:{color:'#252a3a'}
+                }
             },
             plugins:{ legend:{display:false}, tooltip:{enabled:false} }
         }
@@ -1486,9 +1509,15 @@ const RENKO_SOURCE_CAP = 3000; // ticks source max pour le calcul (perf)
 const RENKO_DISPLAY_CAP = 150; // briques affichées max (lisibilité)
 function updateRenkoChart(){
     if(!renkoChart) return;
-    const brickSize = parseFloat(document.getElementById('renko-brick').value) || 1;
+    const brickSize = parseFloat(document.getElementById('renko-brick').value) || 0.3;
     const source = ticksData.prices.slice(-RENKO_SOURCE_CAP);
     const bricks = calculateRenko(source, brickSize).slice(-RENKO_DISPLAY_CAP);
+    const emptyMsg = document.getElementById('renko-empty-msg');
+    if(bricks.length === 0){
+        if(emptyMsg) emptyMsg.style.display = 'flex';
+    } else {
+        if(emptyMsg) emptyMsg.style.display = 'none';
+    }
     renkoChart.data.labels = bricks.map((_,i)=>i+1);
     renkoChart.data.datasets[0].data = bricks.map(b=>[Math.min(b.from,b.to), Math.max(b.from,b.to)]);
     renkoChart.data.datasets[0].backgroundColor = bricks.map(b=> b.dir>0 ? 'rgba(0,200,150,.55)' : 'rgba(255,77,106,.55)');
@@ -1730,6 +1759,7 @@ function updateChartData(forceEnd=false){
     const fractalsW = calculateFractals(wPrices,fracPer);
     const fractals = { up: padNull(fractalsW.up), down: padNull(fractalsW.down) };
     lastFractalPeaks=extractPeaks(ticksData.prices,fractals,fracPer);
+
     const stResultW=calculateSuperTrend(wPrices,null,null,stPeriod,stMult);
     const stResult = { bull: padNull(stResultW.bull), bear: padNull(stResultW.bear) };
     const maValsW = maType==='ema' ? calculateEMA(wPrices,maPeriod) : calculateSMA(wPrices,maPeriod);
