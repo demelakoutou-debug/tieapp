@@ -464,6 +464,7 @@
     <button class="btn active" id="btn-sar" onclick="toggleIndicator('sar')"><span class="btn-dot" style="background:var(--orange)"></span>SAR</button>
     <button class="btn active" id="btn-fractal" onclick="toggleIndicator('fractal')"><span class="btn-dot" style="background:var(--purple)"></span>Fractals</button>
     <button class="btn active" id="btn-st" onclick="toggleIndicator('st')"><span class="btn-dot" style="background:#ffc800"></span>SuperTrend</button>
+    <button class="btn" id="btn-st-adaptive" onclick="toggleSTAdaptive()"><span class="btn-dot" style="background:#c77dff"></span>ST Adaptatif</button>
     <button class="btn" id="btn-ma" onclick="toggleIndicator('ma')"><span class="btn-dot" style="background:#4dd0e1"></span>MA</button>
     <button class="btn active" id="btn-levels" onclick="toggleLevels()"><span class="btn-dot" style="background:var(--green)"></span>Niveaux</button>
     <button class="btn active" id="btn-autoscroll" onclick="toggleAutoScroll()"><span class="btn-dot" style="background:var(--accent)"></span>Auto-scroll</button>
@@ -485,6 +486,11 @@
             <span class="param-badge badge-st">ST</span>
             <div class="param-row"><span class="param-lbl">Période</span><input class="param-input wide" type="number" id="st-period" value="10" step="1" min="2" onchange="onParamsChanged()"></div>
             <div class="param-row"><span class="param-lbl">Mult</span><input class="param-input wide" type="number" id="st-mult" value="3" step="0.5" min="0.5" onchange="onParamsChanged()"></div>
+            <span id="st-adaptive-params" style="display:none;">
+                <div class="param-row"><span class="param-lbl">Plage adapt. %</span><input class="param-input wide" type="number" id="st-adapt-range" value="40" step="5" min="0" max="100" onchange="onParamsChanged()"></div>
+                <div class="param-row"><span class="param-lbl">Confirm (ticks)</span><input class="param-input" type="number" id="st-confirm" value="2" step="1" min="1" max="10" onchange="onParamsChanged()"></div>
+                <div class="param-row"><span class="param-lbl">Signal</span><span id="st-confirm-status" style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:var(--muted);">—</span></div>
+            </span>
         </div>
         <div class="param-section" id="param-ma" style="display:none;">
             <span class="param-badge badge-ma">MA</span>
@@ -886,6 +892,7 @@ const RIGHT_PAD = 30, VIEW_WINDOW = 180;
 const INDICATOR_WINDOW = 1500;
 let ticksData = { times:[], prices:[], highs:[], lows:[] };
 let showSAR=true, showFractal=true, showLevels=true, showST=true, showMA=false;
+let stAdaptiveOn=false;
 let autoScrollEnabled=true;
 let sessionHigh=null, sessionLow=null;
 let lastFractalPeaks = { up:[], down:[] };
@@ -1730,8 +1737,37 @@ function updateChartData(forceEnd=false){
     const fractalsW = calculateFractals(wPrices,fracPer);
     const fractals = { up: padNull(fractalsW.up), down: padNull(fractalsW.down) };
     lastFractalPeaks=extractPeaks(ticksData.prices,fractals,fracPer);
-    const stResultW=calculateSuperTrend(wPrices,null,null,stPeriod,stMult);
+
+    /* ⚡ SUPERTREND ADAPTATIF (optionnel) : ajuste le multiplicateur selon
+       le régime d'entropie actuel (bandes plus larges en régime bruité
+       pour filtrer les faux cassures, plus serrées en régime patterné
+       pour rester réactif), et exige une confirmation sur N ticks avant
+       de valider un retournement — les deux mesures qui réduisent le
+       whipsaw sans réintroduire du délai excessif quand ce n'est pas
+       nécessaire (mode normal inchangé quand désactivé). */
+    let stMultEffective = stMult;
+    let confirmTicks = 1;
+    if(stAdaptiveOn){
+        const adaptRange = (parseFloat(document.getElementById('st-adapt-range').value)||40)/100;
+        // lastEntropyNormalized ∈ [0,1] : 0=patterné (bandes resserrées), 1=bruit (bandes élargies)
+        const factor = 1 + adaptRange*(lastEntropyNormalized - 0.5)*2;
+        stMultEffective = stMult * Math.max(0.2, factor);
+        confirmTicks = parseInt(document.getElementById('st-confirm').value)||2;
+    }
+    const stResultW=calculateSuperTrend(wPrices,null,null,stPeriod,stMultEffective,confirmTicks);
     const stResult = { bull: padNull(stResultW.bull), bear: padNull(stResultW.bear) };
+    if(stAdaptiveOn){
+        const statusEl = document.getElementById('st-confirm-status');
+        if(statusEl){
+            if(stResultW.pendingCount > 0){
+                statusEl.innerText = '⏳ '+stResultW.pendingCount+'/'+confirmTicks;
+                statusEl.style.color = 'var(--orange)';
+            } else {
+                statusEl.innerText = '✓ Confirmé (mult ×'+(stMultEffective/stMult).toFixed(2)+')';
+                statusEl.style.color = 'var(--green)';
+            }
+        }
+    }
     const maValsW = maType==='ema' ? calculateEMA(wPrices,maPeriod) : calculateSMA(wPrices,maPeriod);
     const maVals = padNull(maValsW);
     chart.data.labels=[...ticksData.times,...Array(RIGHT_PAD).fill('')];
@@ -1909,6 +1945,13 @@ function toggleIndicator(type){
     else if(type==='st'){showST=!showST;chart.setDatasetVisibility(4,showST);chart.setDatasetVisibility(5,showST);document.getElementById('btn-st').classList.toggle('active',showST);document.getElementById('param-st').style.display=showST?'':'none';}
     else if(type==='ma'){showMA=!showMA;chart.setDatasetVisibility(6,showMA);document.getElementById('btn-ma').classList.toggle('active',showMA);document.getElementById('param-ma').style.display=showMA?'':'none';}
     chart.update('none');
+}
+function toggleSTAdaptive(){
+    stAdaptiveOn = !stAdaptiveOn;
+    document.getElementById('btn-st-adaptive').classList.toggle('active', stAdaptiveOn);
+    document.getElementById('st-adaptive-params').style.display = stAdaptiveOn ? 'inline' : 'none';
+    try{ localStorage.setItem('st_adaptive_on', stAdaptiveOn ? '1' : '0'); }catch(e){}
+    onParamsChanged();
 }
 function toggleParamPanel(){
     const panel = document.getElementById('param-panel');
@@ -2190,11 +2233,12 @@ function formatTime(epoch){
 /* ════════════════════════════════════════════
    SUPERTREND
 ════════════════════════════════════════════ */
-function calculateSuperTrend(prices,_h,_l,period,mult){
+function calculateSuperTrend(prices,_h,_l,period,mult,confirmTicks){
+    confirmTicks = confirmTicks || 1; // 1 = comportement original (flip immédiat, pas de confirmation)
     const n=prices.length;
     const bull=new Array(n).fill(null),bear=new Array(n).fill(null),trend=new Array(n).fill(0);
     const p=Math.min(period,Math.floor(n/2)-1);
-    if(p<2||n<p+2)return{bull,bear,trend};
+    if(p<2||n<p+2)return{bull,bear,trend,pendingCount:0,pendingDir:0};
 
     /* ⚠️ FIX "Période" inactif : un Step Index bouge d'un pas de taille
        FIXE à chaque tick (+0.1 ou -0.1). L'ancienne mesure de volatilité
@@ -2223,21 +2267,44 @@ function calculateSuperTrend(prices,_h,_l,period,mult){
     }
 
     const upper=new Array(n).fill(0),lower=new Array(n).fill(0);
+    const rawTrend=new Array(n).fill(0);
     for(let i=p;i<n;i++){
         const src=(prices[i]+prices[i-1])/2;
         const band=mult*atr[i];
         const bUp=src+band,bDn=src-band;
-        if(i===p){upper[i]=bUp;lower[i]=bDn;trend[i]=prices[i]>bUp?1:-1;}
+        if(i===p){upper[i]=bUp;lower[i]=bDn;rawTrend[i]=prices[i]>bUp?1:-1;}
         else{
             upper[i]=(bUp<upper[i-1]||prices[i-1]>upper[i-1])?bUp:upper[i-1];
             lower[i]=(bDn>lower[i-1]||prices[i-1]<lower[i-1])?bDn:lower[i-1];
-            if(trend[i-1]===-1)trend[i]=prices[i]>upper[i]?1:-1;
-            else trend[i]=prices[i]<lower[i]?-1:1;
+            if(rawTrend[i-1]===-1)rawTrend[i]=prices[i]>upper[i]?1:-1;
+            else rawTrend[i]=prices[i]<lower[i]?-1:1;
         }
+    }
+
+    /* ⚡ CONFIRMATION SUR N TICKS (mode Adaptatif) : au lieu de retourner
+       le signal dès qu'un seul tick dépasse la bande, on exige que le
+       signal "brut" (rawTrend) reste cohérent pendant confirmTicks ticks
+       consécutifs avant de valider le retournement affiché (trend). Ça
+       filtre les faux cassures ponctuelles ("en aiguille") qui causent
+       des pertes en série. Avec confirmTicks=1, trend===rawTrend (identique
+       au comportement d'origine). */
+    let confirmed = rawTrend[p], pendingDir = rawTrend[p], pendingCount = 0;
+    trend[p] = confirmed;
+    for(let i=p+1;i<n;i++){
+        if(rawTrend[i] === confirmed){
+            pendingCount = 0; pendingDir = confirmed;
+        } else {
+            if(rawTrend[i] === pendingDir) pendingCount++;
+            else { pendingDir = rawTrend[i]; pendingCount = 1; }
+            if(pendingCount >= confirmTicks){ confirmed = pendingDir; pendingCount = 0; }
+        }
+        trend[i] = confirmed;
+    }
+    for(let i=p;i<n;i++){
         if(trend[i]===1){bull[i]=lower[i];bear[i]=null;}
         else{bear[i]=upper[i];bull[i]=null;}
     }
-    return{bull,bear,trend};
+    return{bull,bear,trend,pendingCount,pendingDir};
 }
 function updateStreak(prices,stResult){
     const pill=document.getElementById('streak-pill');
@@ -2418,6 +2485,7 @@ let entropyWindow = 200;
 let entropyLength = 3;
 let _entropyTickCounter = 0;
 const ENTROPY_RECOMPUTE_EVERY = 5;
+let lastEntropyNormalized = 0.5; // valeur par défaut neutre tant que la collecte n'a pas assez de données
 
 function onEntropyConfig(){
     entropyWindow = parseInt(document.getElementById('entropy-window').value) || 200;
@@ -2472,6 +2540,7 @@ function updateEntropyDisplay(force){
     const result = computeShannonEntropy(seq.slice(winStart), entropyLength);
     if(result===null) return;
     const H = result.normalized;
+    lastEntropyNormalized = H;
     const valEl = document.getElementById('entropy-val');
     valEl.innerText = H.toFixed(3);
     document.getElementById('entropy-marker').style.left = (H*100).toFixed(1)+'%';
@@ -2827,6 +2896,14 @@ window.onload = async () => {
         if(savedPsHist === '0'){
             document.getElementById('ps-sequence').style.display = 'none';
             document.getElementById('btn-ps-history-toggle').classList.remove('active');
+        }
+    }catch(e){}
+    try{
+        const savedSTAdapt = localStorage.getItem('st_adaptive_on');
+        if(savedSTAdapt === '1'){
+            stAdaptiveOn = true;
+            document.getElementById('btn-st-adaptive').classList.add('active');
+            document.getElementById('st-adaptive-params').style.display = 'inline';
         }
     }catch(e){}
     try{
