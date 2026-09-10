@@ -408,6 +408,14 @@
             flex-shrink: 0; overflow-x: auto;
         }
         #payout-sim-bar::-webkit-scrollbar { height: 0; }
+        #st-break-bar {
+            background: #0d1120;
+            border-bottom: 1px solid var(--border);
+            padding: 6px 16px;
+            display: flex; align-items: center; gap: 10px;
+            flex-shrink: 0; overflow-x: auto;
+        }
+        #st-break-bar::-webkit-scrollbar { height: 0; }
         .ps-title { font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700; color:var(--accent); white-space:nowrap; }
         .ps-sep { width:1px; height:26px; background:var(--border); flex-shrink:0; }
         .ps-sequence { display:flex; gap:3px; align-items:center; flex-shrink:0; }
@@ -428,6 +436,14 @@
         .ps-current.comp { background:rgba(0,200,150,.15); color:var(--green); border-color:rgba(0,200,150,.4); }
         .ps-current.std  { background:rgba(255,77,106,.15); color:var(--red); border-color:rgba(255,77,106,.4); }
         .ps-legend { font-size:9px; color:var(--muted); white-space:nowrap; }
+        .stb-chip {
+            display:flex; align-items:center; justify-content:center; gap:2px;
+            min-width:34px; height:30px; padding:0 7px; border-radius:5px; flex-shrink:0;
+            font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700;
+            border:1px solid transparent;
+        }
+        .stb-chip.comp { background:rgba(0,200,150,.18); border-color:rgba(0,200,150,.5); color:var(--green); }
+        .stb-chip.std  { background:rgba(255,77,106,.18); border-color:rgba(255,77,106,.5); color:var(--red); }
 
         /* ── EV Bar collapse ── */
         #ev-bar { transition: padding .2s, min-height .2s; overflow: hidden; }
@@ -483,8 +499,8 @@
         </div>
         <div class="param-section" id="param-st">
             <span class="param-badge badge-st">ST</span>
-            <div class="param-row"><span class="param-lbl">Période</span><input class="param-input wide" type="number" id="st-period" value="10" step="1" min="2" onchange="onParamsChanged()"></div>
-            <div class="param-row"><span class="param-lbl">Mult</span><input class="param-input wide" type="number" id="st-mult" value="3" step="0.5" min="0.5" onchange="onParamsChanged()"></div>
+            <div class="param-row"><span class="param-lbl">Période</span><input class="param-input wide" type="number" id="st-period" value="10" step="1" min="2" onchange="onParamsChanged();resetSTBreakCounter();"></div>
+            <div class="param-row"><span class="param-lbl">Mult</span><input class="param-input wide" type="number" id="st-mult" value="3" step="0.5" min="0.5" onchange="onParamsChanged();resetSTBreakCounter();"></div>
         </div>
         <div class="param-section" id="param-ma" style="display:none;">
             <span class="param-badge badge-ma">MA</span>
@@ -526,6 +542,7 @@
     <button class="btn active" data-panel="stats-bar" onclick="togglePanelVisibility('stats-bar', this)">Stats</button>
     <button class="btn active" data-panel="tie-bar" onclick="togglePanelVisibility('tie-bar', this)">Tie Predictor</button>
     <button class="btn active" data-panel="payout-sim-bar" onclick="togglePanelVisibility('payout-sim-bar', this)">Simulateur Payout</button>
+    <button class="btn active" data-panel="st-break-bar" onclick="togglePanelVisibility('st-break-bar', this)">Cassures ST</button>
     <div class="pt-spacer">
         <button class="btn" onclick="setAllPanels(true)">Tout afficher</button>
         <button class="btn" onclick="setAllPanels(false)">Tout masquer</button>
@@ -845,6 +862,17 @@
     <div class="ps-sep"></div>
     <button class="btn active" id="btn-ps-history-toggle" onclick="togglePayoutSimHistory()">👁 Historique</button>
     <div class="ps-sequence" id="ps-sequence"></div>
+</div>
+
+<!-- ═══ SUPERTREND BREAK COUNTER ═══ -->
+<div id="st-break-bar">
+    <span class="ps-title">📐 Compteur de cassures SuperTrend</span>
+    <div class="ps-sep"></div>
+    <div class="ps-current std" id="st-break-live">— en attente</div>
+    <div class="ps-sep"></div>
+    <span class="ps-legend">10 dernières cassures :</span>
+    <button class="btn active" id="btn-st-break-history-toggle" onclick="toggleSTBreakHistory()">👁 Historique</button>
+    <div class="ps-sequence" id="st-break-history"></div>
 </div>
 
 <!-- ═══ CHART ═══ -->
@@ -1762,6 +1790,7 @@ function updateChartData(forceEnd=false){
 
     const stResultW=calculateSuperTrend(wPrices,null,null,stPeriod,stMult);
     const stResult = { bull: padNull(stResultW.bull), bear: padNull(stResultW.bear) };
+    if(showST) trackSTBreak(stResultW.trend[stResultW.trend.length-1]);
     const maValsW = maType==='ema' ? calculateEMA(wPrices,maPeriod) : calculateSMA(wPrices,maPeriod);
     const maVals = padNull(maValsW);
     chart.data.labels=[...ticksData.times,...Array(RIGHT_PAD).fill('')];
@@ -2697,6 +2726,71 @@ function togglePayoutSimHistory(){
 }
 
 /* ════════════════════════════════════════════
+   COMPTEUR DE CASSURES SUPERTREND
+   ─────────────────────────────────────────
+   À chaque tick, on regarde la direction actuelle du SuperTrend (haussier
+   ▲ / baissier ▼). Tant qu'elle ne change pas, un compteur s'incrémente
+   en temps réel (le nombre de ticks depuis la dernière cassure de bande).
+   Dès que la direction bascule, le segment précédent est archivé dans
+   l'historique (coloré vert/rouge comme le Simulateur Payout) et le
+   compteur repart de zéro pour la nouvelle direction. On garde les 10
+   dernières cassures.
+════════════════════════════════════════════ */
+let stTrackDir = 0;      // 0 = pas encore initialisé, 1 = haussier, -1 = baissier
+let stTrackCount = 0;    // ticks écoulés depuis la dernière cassure
+let stBreakHistory = []; // {dir, count} des cassures passées, plus ancienne en premier
+const ST_BREAK_HISTORY_MAX = 10;
+
+function trackSTBreak(currentDir){
+    if(currentDir !== 1 && currentDir !== -1) return;
+    if(stTrackDir === 0){
+        stTrackDir = currentDir;
+        stTrackCount = 1;
+        renderSTBreakCounter();
+        return;
+    }
+    if(currentDir === stTrackDir){
+        stTrackCount++;
+    } else {
+        stBreakHistory.push({dir: stTrackDir, count: stTrackCount});
+        if(stBreakHistory.length > ST_BREAK_HISTORY_MAX) stBreakHistory.shift();
+        stTrackDir = currentDir;
+        stTrackCount = 1;
+    }
+    renderSTBreakCounter();
+}
+function renderSTBreakCounter(){
+    const liveEl = document.getElementById('st-break-live');
+    const histEl = document.getElementById('st-break-history');
+    if(!liveEl || !histEl) return;
+    if(stTrackDir === 0){
+        liveEl.className = 'ps-current std';
+        liveEl.innerText = '— en attente';
+    } else {
+        liveEl.className = 'ps-current ' + (stTrackDir===1 ? 'comp' : 'std');
+        liveEl.innerText = (stTrackDir===1 ? '▲ ' : '▼ ') + stTrackCount + ' ticks';
+    }
+    histEl.innerHTML = stBreakHistory.map(h=>{
+        const cls = h.dir===1 ? 'comp' : 'std';
+        const arrow = h.dir===1 ? '▲' : '▼';
+        return '<div class="stb-chip '+cls+'">'+arrow+h.count+'</div>';
+    }).join('');
+    histEl.scrollLeft = histEl.scrollWidth;
+}
+function resetSTBreakCounter(){
+    stTrackDir = 0; stTrackCount = 0; stBreakHistory = [];
+    renderSTBreakCounter();
+}
+function toggleSTBreakHistory(){
+    const hist = document.getElementById('st-break-history');
+    const btn = document.getElementById('btn-st-break-history-toggle');
+    const nowVisible = hist.style.display !== 'none';
+    hist.style.display = nowVisible ? 'none' : '';
+    btn.classList.toggle('active', !nowVisible);
+    try{ localStorage.setItem('st_break_history_visible', nowVisible ? '0' : '1'); }catch(e){}
+}
+
+/* ════════════════════════════════════════════
    CALCULATEUR D'ESPÉRANCE
 ════════════════════════════════════════════ */
 function computePTie(n){
@@ -2774,6 +2868,7 @@ document.getElementById('market-select').addEventListener('change',e=>{
     resetEntropyState();
     resetPayoutSim();
     resetRenkoState();
+    resetSTBreakCounter();
     mkSigTotal=0; mkSigWin=0;
     document.getElementById('mk-signal').className='mk-signal neut';
     document.getElementById('mk-signal').innerText='— attente';
@@ -2799,7 +2894,7 @@ function toggleEVBar(){
    L'état choisi est mémorisé (localStorage) et réappliqué
    au rechargement de la page.
 ════════════════════════════════════════════ */
-const PANEL_IDS = ['trade-bar','ev-bar','markov-bar','entropy-bar','stats-bar','tie-bar','payout-sim-bar'];
+const PANEL_IDS = ['trade-bar','ev-bar','markov-bar','entropy-bar','stats-bar','tie-bar','payout-sim-bar','st-break-bar'];
 function togglePanelVisibility(panelId, btnEl){
     const el = document.getElementById(panelId);
     if(!el) return;
@@ -2857,6 +2952,13 @@ window.onload = async () => {
         if(savedPsHist === '0'){
             document.getElementById('ps-sequence').style.display = 'none';
             document.getElementById('btn-ps-history-toggle').classList.remove('active');
+        }
+    }catch(e){}
+    try{
+        const savedStbHist = localStorage.getItem('st_break_history_visible');
+        if(savedStbHist === '0'){
+            document.getElementById('st-break-history').style.display = 'none';
+            document.getElementById('btn-st-break-history-toggle').classList.remove('active');
         }
     }catch(e){}
     try{
