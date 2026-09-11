@@ -499,8 +499,8 @@
         </div>
         <div class="param-section" id="param-st">
             <span class="param-badge badge-st">ST</span>
-            <div class="param-row"><span class="param-lbl">Période</span><input class="param-input wide" type="number" id="st-period" value="10" step="1" min="2" onchange="onParamsChanged();resetSTBreakCounter();"></div>
-            <div class="param-row"><span class="param-lbl">Mult</span><input class="param-input wide" type="number" id="st-mult" value="3" step="0.5" min="0.5" onchange="onParamsChanged();resetSTBreakCounter();"></div>
+            <div class="param-row"><span class="param-lbl">Période</span><input class="param-input wide" type="number" id="st-period" value="10" step="1" min="2" onchange="rebuildSTFromHistory();onParamsChanged();"></div>
+            <div class="param-row"><span class="param-lbl">Mult</span><input class="param-input wide" type="number" id="st-mult" value="3" step="0.5" min="0.5" onchange="rebuildSTFromHistory();onParamsChanged();"></div>
         </div>
         <div class="param-section" id="param-ma" style="display:none;">
             <span class="param-badge badge-ma">MA</span>
@@ -916,6 +916,106 @@ const RIGHT_PAD = 30, VIEW_WINDOW = 180;
    bloqué (voir updateChartData). Largement suffisant pour la
    stabilisation de ces indicateurs. */
 const INDICATOR_WINDOW = 1500;
+
+/* ════════════════════════════════════════════
+   SUPERTREND INCRÉMENTAL
+   ─────────────────────────────────────────
+   ⚠️ FIX BUG "fausses cassures" : le SuperTrend était recalculé depuis
+   zéro sur une fenêtre glissante à CHAQUE tick (optimisation perf). Le
+   problème : à chaque recalcul, le "point de départ" de la fenêtre
+   change (un tick plus loin), ce qui réamorce le mécanisme en cascade
+   (upper/lower/trend) avec un nouveau point de départ arbitraire — et
+   pouvait faire basculer la classification de tendance SANS aucun vrai
+   mouvement de prix significatif. D'où des cassures fantômes qui
+   redémarraient le compteur à zéro alors qu'il n'y avait pas de vraie
+   cassure.
+   Le calcul est maintenant INCRÉMENTAL : un état persistant (bande haute/
+   basse, tendance, fenêtre glissante pour l'écart-type) avance d'UN seul
+   tick à chaque nouveau prix, jamais réamorcé — sauf reconstruction
+   volontaire complète (chargement d'historique, changement de marché,
+   ou changement des paramètres Période/Mult, qui redéfinissent le calcul
+   et doivent repartir proprement).
+════════════════════════════════════════════ */
+let stBullArr = [];  // aligné 1:1 avec ticksData.prices
+let stBearArr = [];
+let stIncr = { period:null, mult:null, sumP:0, sumSqP:0, buf:[], prevPrice:null, upper:null, lower:null, trend:0, ready:false };
+
+function resetSTIncremental(){
+    stIncr = { period:null, mult:null, sumP:0, sumSqP:0, buf:[], prevPrice:null, upper:null, lower:null, trend:0, ready:false };
+    stBullArr = []; stBearArr = [];
+}
+function stStepOne(price, period, mult){
+    if(stIncr.period !== period || stIncr.mult !== mult){
+        /* Changement de paramètre en cours de route : l'état ratchet
+           précédent n'a plus de sens avec les nouveaux réglages, on le
+           réinitialise proprement (mais on garde prevPrice pour ne pas
+           perdre un point de continuité). */
+        stIncr.period = period; stIncr.mult = mult;
+        stIncr.sumP = 0; stIncr.sumSqP = 0; stIncr.buf = [];
+        stIncr.upper = null; stIncr.lower = null; stIncr.trend = 0; stIncr.ready = false;
+    }
+    stIncr.buf.push(price);
+    stIncr.sumP += price; stIncr.sumSqP += price*price;
+    if(stIncr.buf.length > period){
+        const old = stIncr.buf.shift();
+        stIncr.sumP -= old; stIncr.sumSqP -= old*old;
+    }
+    const cnt = stIncr.buf.length;
+    let atr = 0.0001;
+    if(cnt >= 2){
+        const mean = stIncr.sumP/cnt;
+        const variance = Math.max(0, stIncr.sumSqP/cnt - mean*mean);
+        atr = Math.sqrt(variance) || 0.0001;
+    }
+    if(stIncr.prevPrice === null){
+        stIncr.prevPrice = price;
+        return { bull:null, bear:null, trend:0, ready:false };
+    }
+    const src = (price + stIncr.prevPrice)/2;
+    const band = mult*atr;
+    const bUp = src+band, bDn = src-band;
+    if(!stIncr.ready){
+        stIncr.upper = bUp; stIncr.lower = bDn;
+        stIncr.trend = price > bUp ? 1 : -1;
+        stIncr.ready = true;
+    } else {
+        stIncr.upper = (bUp < stIncr.upper || stIncr.prevPrice > stIncr.upper) ? bUp : stIncr.upper;
+        stIncr.lower = (bDn > stIncr.lower || stIncr.prevPrice < stIncr.lower) ? bDn : stIncr.lower;
+        if(stIncr.trend === -1) stIncr.trend = price > stIncr.upper ? 1 : -1;
+        else stIncr.trend = price < stIncr.lower ? -1 : 1;
+    }
+    stIncr.prevPrice = price;
+    return {
+        bull: stIncr.trend===1 ? stIncr.lower : null,
+        bear: stIncr.trend===1 ? null : stIncr.upper,
+        trend: stIncr.trend, ready: true
+    };
+}
+function getSTParams(){
+    return {
+        period: parseInt(document.getElementById('st-period').value)||10,
+        mult:   parseFloat(document.getElementById('st-mult').value)||3
+    };
+}
+function rebuildSTFromHistory(){
+    resetSTIncremental();
+    const {period, mult} = getSTParams();
+    for(const price of ticksData.prices){
+        const r = stStepOne(price, period, mult);
+        stBullArr.push(r.bull);
+        stBearArr.push(r.bear);
+    }
+    resetSTBreakCounter();
+}
+function stStepNewTick(price){
+    const {period, mult} = getSTParams();
+    const r = stStepOne(price, period, mult);
+    stBullArr.push(r.bull);
+    stBearArr.push(r.bear);
+    if(stBullArr.length > 6000){ stBullArr.shift(); stBearArr.shift(); } // reste aligné avec le cap de ticksData
+    if(showST && r.ready) trackSTBreak(r.trend);
+}
+
 let ticksData = { times:[], prices:[], highs:[], lows:[] };
 let showSAR=true, showFractal=true, showLevels=true, showST=true, showMA=false;
 let autoScrollEnabled=true;
@@ -1717,6 +1817,7 @@ function processHistory(h){
     chart.scales.y.options.min=undefined;
     chart.scales.y.options.max=undefined;
     updateStatDisplay();
+    rebuildSTFromHistory();
     updateChartData(true);
     if(chartMode==='renko') updateRenkoChart();
 }
@@ -1743,6 +1844,7 @@ function processNewTick(tick){
         updateEntropyDisplay(false);
         tpUpdate();
     }
+    stStepNewTick(p);
     const el = document.getElementById('last-price');
     el.innerText   = fmt1(p);
     el.style.color = p >= (prev||p) ? 'var(--green)' : 'var(--red)';
@@ -1764,8 +1866,6 @@ function updateChartData(forceEnd=false){
     const sarStep=parseFloat(document.getElementById('sar-step').value)||0.02;
     const sarMax=parseFloat(document.getElementById('sar-max').value)||0.2;
     const fracPer=parseInt(document.getElementById('fractal-period').value)||2;
-    const stPeriod=parseInt(document.getElementById('st-period').value)||10;
-    const stMult=parseFloat(document.getElementById('st-mult').value)||3;
     const maPeriod=parseInt(document.getElementById('ma-period').value)||20;
     const maType=document.getElementById('ma-type').value||'sma';
 
@@ -1788,9 +1888,11 @@ function updateChartData(forceEnd=false){
     const fractals = { up: padNull(fractalsW.up), down: padNull(fractalsW.down) };
     lastFractalPeaks=extractPeaks(ticksData.prices,fractals,fracPer);
 
-    const stResultW=calculateSuperTrend(wPrices,null,null,stPeriod,stMult);
-    const stResult = { bull: padNull(stResultW.bull), bear: padNull(stResultW.bear) };
-    if(showST) trackSTBreak(stResultW.trend[stResultW.trend.length-1]);
+    /* Le SuperTrend n'est plus recalculé ici : il avance de façon
+       incrémentale (voir stStepNewTick / rebuildSTFromHistory) et les
+       tableaux stBullArr/stBearArr sont déjà alignés 1:1 sur
+       ticksData.prices — on les utilise tels quels. */
+    const stResult = { bull: stBullArr, bear: stBearArr };
     const maValsW = maType==='ema' ? calculateEMA(wPrices,maPeriod) : calculateSMA(wPrices,maPeriod);
     const maVals = padNull(maValsW);
     chart.data.labels=[...ticksData.times,...Array(RIGHT_PAD).fill('')];
@@ -2770,12 +2872,14 @@ function renderSTBreakCounter(){
         liveEl.className = 'ps-current ' + (stTrackDir===1 ? 'comp' : 'std');
         liveEl.innerText = (stTrackDir===1 ? '▲ ' : '▼ ') + stTrackCount + ' ticks';
     }
-    histEl.innerHTML = stBreakHistory.map(h=>{
+    /* Ordre décroissant : la cassure la plus récente en premier (à
+       gauche), donc toujours visible sans avoir à défiler. */
+    histEl.innerHTML = [...stBreakHistory].reverse().map(h=>{
         const cls = h.dir===1 ? 'comp' : 'std';
         const arrow = h.dir===1 ? '▲' : '▼';
         return '<div class="stb-chip '+cls+'">'+arrow+h.count+'</div>';
     }).join('');
-    histEl.scrollLeft = histEl.scrollWidth;
+    histEl.scrollLeft = 0;
 }
 function resetSTBreakCounter(){
     stTrackDir = 0; stTrackCount = 0; stBreakHistory = [];
@@ -2868,6 +2972,7 @@ document.getElementById('market-select').addEventListener('change',e=>{
     resetEntropyState();
     resetPayoutSim();
     resetRenkoState();
+    resetSTIncremental();
     resetSTBreakCounter();
     mkSigTotal=0; mkSigWin=0;
     document.getElementById('mk-signal').className='mk-signal neut';
