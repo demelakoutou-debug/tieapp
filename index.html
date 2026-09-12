@@ -369,21 +369,21 @@
     <div class="vdiv"></div>
     <div class="param-panel" id="param-panel">
         <div class="param-section" id="param-sar">
-            <span class="param-badge badge-sar">SAR</span>
+            <span class="param-badge badge-sar" onclick="resetIndicatorParams('sar')" style="cursor:pointer" title="Réinitialiser SAR par défaut">SAR ↺</span>
             <div class="param-row"><span class="param-lbl">Step</span><input class="param-input wide" type="number" id="sar-step" value="0.02" step="0.005" min="0.001" onchange="onParamsChanged()"></div>
             <div class="param-row"><span class="param-lbl">Max</span><input class="param-input wide" type="number" id="sar-max" value="0.2" step="0.01" min="0.01" onchange="onParamsChanged()"></div>
         </div>
         <div class="param-section" id="param-frc">
-            <span class="param-badge badge-frc">FRACTAL</span>
+            <span class="param-badge badge-frc" onclick="resetIndicatorParams('fractal')" style="cursor:pointer" title="Réinitialiser Fractal par défaut">FRACTAL ↺</span>
             <div class="param-row"><span class="param-lbl">Voisins</span><input class="param-input" type="number" id="fractal-period" value="2" step="1" min="1" max="10" onchange="onParamsChanged()"></div>
         </div>
         <div class="param-section" id="param-st">
-            <span class="param-badge badge-st">ST</span>
+            <span class="param-badge badge-st" onclick="resetIndicatorParams('st')" style="cursor:pointer" title="Réinitialiser SuperTrend par défaut">ST ↺</span>
             <div class="param-row"><span class="param-lbl">Période</span><input class="param-input wide" type="number" id="st-period" value="10" step="1" min="2" onchange="rebuildSTFromHistory();onParamsChanged();"></div>
             <div class="param-row"><span class="param-lbl">Mult</span><input class="param-input wide" type="number" id="st-mult" value="3" step="0.5" min="0.5" onchange="rebuildSTFromHistory();onParamsChanged();"></div>
         </div>
         <div class="param-section" id="param-ma" style="display:none;">
-            <span class="param-badge badge-ma">MA</span>
+            <span class="param-badge badge-ma" onclick="resetIndicatorParams('ma')" style="cursor:pointer" title="Réinitialiser MA par défaut">MA ↺</span>
             <div class="param-row"><span class="param-lbl">Période</span><input class="param-input wide" type="number" id="ma-period" value="20" step="1" min="2" onchange="onParamsChanged()"></div>
             <div class="param-row"><span class="param-lbl">Type</span>
                 <select id="ma-type" onchange="onParamsChanged()" style="background:var(--bg);border:1px solid var(--border2);color:var(--text);padding:4px 6px;border-radius:4px;font-size:11px;font-family:'JetBrains Mono',monospace;cursor:pointer;">
@@ -393,7 +393,7 @@
             </div>
         </div>
         <div class="param-section" id="param-renko" style="display:none;">
-            <span class="param-badge badge-renko">RENKO</span>
+            <span class="param-badge badge-renko" onclick="resetIndicatorParams('renko')" style="cursor:pointer" title="Réinitialiser Renko par défaut">RENKO ↺</span>
             <div class="param-row"><span class="param-lbl">Brique</span><input class="param-input wide" type="number" id="renko-brick" value="0.3" step="0.1" min="0.1" onchange="onParamsChanged()"></div>
         </div>
     </div>
@@ -797,6 +797,126 @@ const TRADE_SYMBOL_MAP = {
 };
 function tradeSymbol(){ return TRADE_SYMBOL_MAP[currentSymbol]||currentSymbol; }
 const fmt1 = v => v != null ? v.toFixed(1) : '—';
+
+/* ════════════════════════════════════════════
+   PARAMÈTRES PERSISTANTS
+   ─────────────────────────────────────────
+   Tous les réglages (paramètres des indicateurs, mise, durée, Allow
+   Equal, config Auto-Trade, marché sélectionné, mode de vue du
+   graphique) sont sauvegardés dans localStorage à chaque modification
+   et restaurés au chargement de la page — un rafraîchissement ne fait
+   plus rien perdre.
+   ⚠️ Exception volontaire : l'activation ON/OFF de l'Auto-Trade
+   n'est PAS restaurée automatiquement, par sécurité — pour éviter
+   qu'un simple rechargement de page ne relance du trading automatique
+   en argent réel sans action explicite de ta part. Sa configuration
+   (seuil, cooldown, direction) est bien conservée, seul le bouton
+   ON/OFF repart à OFF à chaque chargement.
+════════════════════════════════════════════ */
+const SETTINGS_KEY = 'app_settings_v1';
+const DEFAULT_SETTINGS = {
+    sarStep:0.02, sarMax:0.2,
+    fractalPeriod:2,
+    stPeriod:10, stMult:3,
+    maPeriod:20, maType:'sma',
+    renkoBrick:0.3,
+    showSAR:true, showFractal:true, showST:true, showMA:false, showLevels:true,
+    stake:1, durValue:5, durType:'t', allowEqual:false,
+    autoThreshold:55, autoCooldown:10, autoCooldownUnit:'t', autoDirection:'both',
+    market:'stpRNG5', chartMode:'zigzag'
+};
+let appSettings = {...DEFAULT_SETTINGS};
+function loadSettings(){
+    try{
+        const raw = localStorage.getItem(SETTINGS_KEY);
+        if(raw) appSettings = {...DEFAULT_SETTINGS, ...JSON.parse(raw)};
+    }catch(e){}
+}
+function saveSettings(){
+    try{ localStorage.setItem(SETTINGS_KEY, JSON.stringify(appSettings)); }catch(e){}
+}
+function syncSettingsFromInputs(){
+    appSettings.sarStep       = parseFloat(document.getElementById('sar-step').value)||DEFAULT_SETTINGS.sarStep;
+    appSettings.sarMax        = parseFloat(document.getElementById('sar-max').value)||DEFAULT_SETTINGS.sarMax;
+    appSettings.fractalPeriod = parseInt(document.getElementById('fractal-period').value)||DEFAULT_SETTINGS.fractalPeriod;
+    appSettings.stPeriod      = parseInt(document.getElementById('st-period').value)||DEFAULT_SETTINGS.stPeriod;
+    appSettings.stMult        = parseFloat(document.getElementById('st-mult').value)||DEFAULT_SETTINGS.stMult;
+    appSettings.maPeriod      = parseInt(document.getElementById('ma-period').value)||DEFAULT_SETTINGS.maPeriod;
+    appSettings.maType        = document.getElementById('ma-type').value||DEFAULT_SETTINGS.maType;
+    appSettings.renkoBrick    = parseFloat(document.getElementById('renko-brick').value)||DEFAULT_SETTINGS.renkoBrick;
+    appSettings.showSAR       = showSAR;
+    appSettings.showFractal   = showFractal;
+    appSettings.showST        = showST;
+    appSettings.showMA        = showMA;
+    appSettings.showLevels    = showLevels;
+    appSettings.stake         = parseFloat(document.getElementById('stake-input').value)||DEFAULT_SETTINGS.stake;
+    appSettings.durValue      = parseInt(document.getElementById('dur-value').value)||DEFAULT_SETTINGS.durValue;
+    appSettings.durType       = durType;
+    appSettings.allowEqual    = allowEqual;
+    appSettings.autoThreshold = parseFloat(document.getElementById('auto-threshold').value)||DEFAULT_SETTINGS.autoThreshold;
+    appSettings.autoCooldown  = parseFloat(document.getElementById('auto-cooldown').value)||DEFAULT_SETTINGS.autoCooldown;
+    appSettings.autoCooldownUnit = document.getElementById('auto-cooldown-unit').value||DEFAULT_SETTINGS.autoCooldownUnit;
+    appSettings.autoDirection = document.getElementById('auto-direction').value||DEFAULT_SETTINGS.autoDirection;
+    appSettings.market        = currentSymbol;
+    appSettings.chartMode     = chartMode;
+    saveSettings();
+}
+function applyDurTypeUI(type){
+    durType = type;
+    document.getElementById('dur-tick-btn').classList.toggle('active', type==='t');
+    document.getElementById('dur-sec-btn').classList.toggle('active', type==='s');
+    document.getElementById('dur-unit-label').innerText = type==='t' ? 'ticks' : 'sec';
+}
+function applyRestoredInputs(){
+    document.getElementById('sar-step').value       = appSettings.sarStep;
+    document.getElementById('sar-max').value        = appSettings.sarMax;
+    document.getElementById('fractal-period').value = appSettings.fractalPeriod;
+    document.getElementById('st-period').value      = appSettings.stPeriod;
+    document.getElementById('st-mult').value        = appSettings.stMult;
+    document.getElementById('ma-period').value      = appSettings.maPeriod;
+    document.getElementById('ma-type').value        = appSettings.maType;
+    document.getElementById('renko-brick').value    = appSettings.renkoBrick;
+    document.getElementById('stake-input').value    = appSettings.stake;
+    document.getElementById('dur-value').value      = appSettings.durValue;
+    applyDurTypeUI(appSettings.durType);
+    document.getElementById('allow-equal-chk').checked = appSettings.allowEqual;
+    onAllowEqualChange();
+    document.getElementById('auto-threshold').value     = appSettings.autoThreshold;
+    document.getElementById('auto-cooldown').value      = appSettings.autoCooldown;
+    document.getElementById('auto-cooldown-unit').value = appSettings.autoCooldownUnit;
+    document.getElementById('auto-direction').value     = appSettings.autoDirection;
+    updateDoubleLabel();
+    currentSymbol = appSettings.market;
+    const sel = document.getElementById('market-select');
+    if([...sel.options].some(o=>o.value===currentSymbol)) sel.value = currentSymbol;
+}
+function applyRestoredIndicatorVisibility(){
+    if(appSettings.showSAR     !== showSAR)     toggleIndicator('sar');
+    if(appSettings.showFractal !== showFractal) toggleIndicator('fractal');
+    if(appSettings.showST      !== showST)      toggleIndicator('st');
+    if(appSettings.showMA      !== showMA)      toggleIndicator('ma');
+    if(appSettings.showLevels  !== showLevels)  toggleLevels();
+    if(appSettings.chartMode==='renko' && chartMode!=='renko') toggleChartMode();
+}
+function resetIndicatorParams(which){
+    if(which==='sar'){
+        document.getElementById('sar-step').value = DEFAULT_SETTINGS.sarStep;
+        document.getElementById('sar-max').value  = DEFAULT_SETTINGS.sarMax;
+    } else if(which==='fractal'){
+        document.getElementById('fractal-period').value = DEFAULT_SETTINGS.fractalPeriod;
+    } else if(which==='st'){
+        document.getElementById('st-period').value = DEFAULT_SETTINGS.stPeriod;
+        document.getElementById('st-mult').value   = DEFAULT_SETTINGS.stMult;
+        rebuildSTFromHistory();
+    } else if(which==='ma'){
+        document.getElementById('ma-period').value = DEFAULT_SETTINGS.maPeriod;
+        document.getElementById('ma-type').value   = DEFAULT_SETTINGS.maType;
+    } else if(which==='renko'){
+        document.getElementById('renko-brick').value = DEFAULT_SETTINGS.renkoBrick;
+    }
+    onParamsChanged();
+    showFeedback('↺ Paramètres '+which.toUpperCase()+' réinitialisés par défaut','pend');
+}
 
 /* ════════════════════════════════════════════
    RÉSOLUTION DYNAMIQUE DES SYMBOLES STEP INDEX
@@ -1346,6 +1466,7 @@ function toggleChartMode(){
            création (comportement déjà vu sur des canvas masqués/révélés). */
         requestAnimationFrame(()=>{ if(renkoChart) renkoChart.resize(); updateRenkoChart(); });
     }
+    syncSettingsFromInputs();
 }
 function initRenkoChartIfNeeded(){
     if(renkoChart) return;
@@ -2034,6 +2155,7 @@ function toggleIndicator(type){
     else if(type==='st'){showST=!showST;chart.setDatasetVisibility(4,showST);chart.setDatasetVisibility(5,showST);document.getElementById('btn-st').classList.toggle('active',showST);document.getElementById('param-st').style.display=showST?'':'none';}
     else if(type==='ma'){showMA=!showMA;chart.setDatasetVisibility(6,showMA);document.getElementById('btn-ma').classList.toggle('active',showMA);document.getElementById('param-ma').style.display=showMA?'':'none';}
     chart.update('none');
+    syncSettingsFromInputs();
 }
 function toggleParamPanel(){
     const panel = document.getElementById('param-panel');
@@ -2049,6 +2171,7 @@ function toggleLevels(){
     const d=showLevels?'':'none';
     ['hline-high','hline-low','hline-curr','badge-high','badge-low','badge-curr'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display=d;});
     if(showLevels)updatePriceLines();
+    syncSettingsFromInputs();
 }
 function resetZoom(){
     if(!chart)return;
@@ -2071,7 +2194,7 @@ function toggleAutoScroll(){
     /* En réactivant, on revient immédiatement sur le tick le plus récent */
     if(autoScrollEnabled) scrollToEnd(true);
 }
-function onParamsChanged(){updateChartData(false);if(chartMode==='renko')updateRenkoChart();}
+function onParamsChanged(){updateChartData(false);if(chartMode==='renko')updateRenkoChart();syncSettingsFromInputs();}
 let lTimer=null;
 function debounceLines(){clearTimeout(lTimer);lTimer=setTimeout(()=>{updatePriceLines();drawPeakLabels();},50);}
 window.addEventListener('wheel',debounceLines,{passive:true});
@@ -2085,6 +2208,7 @@ function setDurType(type){
     document.getElementById('dur-sec-btn').classList.toggle('active',type==='s');
     document.getElementById('dur-unit-label').innerText=type==='t'?'ticks':'sec';
     document.getElementById('dur-value').value=type==='t'?'5':'60';
+    syncSettingsFromInputs();
 }
 
 /* ════════════════════════════════════════════
@@ -2103,6 +2227,7 @@ function onAllowEqualChange(){
     document.getElementById('lbl-dn').innerText=allowEqual?'PUTÉ':'FALL';
     document.getElementById('sub-dn').innerText=allowEqual?'≤ Equal OK':'Lower';
     document.getElementById('rf-group-label').innerHTML=allowEqual?'Call&eacute; &amp; Put&eacute;':'Rise &amp; Fall';
+    syncSettingsFromInputs();
 }
 
 /* ════════════════════════════════════════════
@@ -2653,6 +2778,14 @@ function toggleSTBreakHistory(){
 
 document.getElementById('stake-input').addEventListener('input', updateDoubleLabel);
 document.getElementById('stake-input').addEventListener('change', updateDoubleLabel);
+
+['stake-input','dur-value','auto-threshold','auto-cooldown','auto-cooldown-unit','auto-direction'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el){
+        el.addEventListener('change', syncSettingsFromInputs);
+        el.addEventListener('input',  syncSettingsFromInputs);
+    }
+});
 
 document.getElementById('market-select').addEventListener('change',e=>{
     currentSymbol=e.target.value;
