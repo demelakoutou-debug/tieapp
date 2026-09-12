@@ -1451,28 +1451,36 @@ window.addEventListener('mouseup',()=>{
 });
 
 /* ════════════════════════════════════════════
-   OUTIL TENDANCE (trendline)
+   OUTIL TENDANCE (trendline) — avec poignées déplaçables
    ─────────────────────────────────────────
-   Permet de tracer une ligne de tendance à main levée : on active le
-   mode, on clique un premier point sur le graphique, puis un second —
-   la ligne est tracée entre les deux et automatiquement prolongée vers
-   la droite (dans la zone de padding vide) à chaque nouveau tick, comme
-   une vraie ligne de tendance qui suit le marché.
-   Rendu via chartjs-plugin-annotation (type 'line'), positions stockées
-   en coordonnées de données (index X = position dans le tableau de
-   labels, Y = prix) — cohérent avec le repère du graphique zigzag.
+   Chaque tendance est composée de :
+     - 2 poignées ("point" annotations, ronds jaunes) que l'on attrape
+       à la souris et fait glisser pour repositionner/redimensionner
+       la ligne ;
+     - 1 segment plein entre les deux poignées ;
+     - 1 prolongement en pointillé qui suit automatiquement le marché
+       vers la droite, sans déplacer les poignées elles-mêmes.
+   L'accroche/glisser est gérée "à la main" (hit-test au pixel près
+   autour de chaque poignée) plutôt que via le draggable natif du
+   plugin, pour garder un contrôle total et éviter les conflits avec
+   le pan/zoom du graphique (désactivé le temps du glissement).
+   Double-clic sur une poignée : supprime la tendance correspondante.
 ════════════════════════════════════════════ */
 let trendlineMode  = false;
 let trendlineDraft = null;   // premier point cliqué, en attente du second
 let trendlines     = [];     // {id, x1,y1,x2,y2}
 let nextTrendlineId = 1;
+const TL_HANDLE_RADIUS = 6;
+const TL_HIT_RADIUS    = 11;
+let draggingHandle    = null;  // {id, which:'1'|'2'}
+let suppressNextClick = false; // évite qu'un drag ne crée un nouveau point
 
 function toggleTrendlineMode(){
     trendlineMode = !trendlineMode;
     trendlineDraft = null;
     document.getElementById('btn-trendline').classList.toggle('active', trendlineMode);
-    document.getElementById('trendline-hint').style.display = trendlineMode ? '' : 'none';
-    document.getElementById('cryptoChart').style.cursor = trendlineMode ? 'crosshair' : 'default';
+    updateTrendlineHint();
+    updateTrendlineCursor();
     showFeedback(
         trendlineMode ? '📈 Mode tendance activé — cliquez 2 points sur le graphique' : '📈 Mode tendance désactivé',
         'pend'
@@ -1482,20 +1490,92 @@ function toggleTrendlineMode(){
         if(el.className==='pend'){el.className='';el.innerText='';}
     }
 }
-function getDataCoordsFromEvent(e){
-    if(!chart) return null;
+function updateTrendlineHint(){
+    const hint = document.getElementById('trendline-hint');
+    const show = trendlineMode || trendlines.length>0;
+    hint.style.display = show ? '' : 'none';
+    hint.innerHTML = trendlineMode
+        ? '<span class="hkey">Clic x2</span>Tracer une tendance &nbsp;•&nbsp; <span class="hkey">Glisser</span>Ajuster &nbsp;•&nbsp; <span class="hkey">Dbl-clic</span>Supprimer'
+        : '<span class="hkey">Glisser</span>Ajuster une tendance &nbsp;•&nbsp; <span class="hkey">Dbl-clic</span>Supprimer';
+}
+function updateTrendlineCursor(){
+    const canvas=document.getElementById('cryptoChart');
+    if(draggingHandle) canvas.style.cursor='grabbing';
+    else if(trendlineMode) canvas.style.cursor='crosshair';
+    else canvas.style.cursor='default';
+}
+function getEventXY(e){
     const canvas = document.getElementById('cryptoChart');
     const rect = canvas.getBoundingClientRect();
-    const xPixel = e.clientX - rect.left;
-    const yPixel = e.clientY - rect.top;
+    return { mx: e.clientX-rect.left, my: e.clientY-rect.top };
+}
+function getDataCoordsFromEvent(e){
+    if(!chart) return null;
+    const {mx,my} = getEventXY(e);
     const xs=chart.scales.x, ys=chart.scales.y;
     if(!xs||!ys) return null;
-    const xVal = xs.getValueForPixel(xPixel);
-    const yVal = ys.getValueForPixel(yPixel);
+    const xVal = xs.getValueForPixel(mx);
+    const yVal = ys.getValueForPixel(my);
     if(xVal==null||yVal==null||isNaN(xVal)||isNaN(yVal)) return null;
     return { x:xVal, y:yVal };
 }
-document.getElementById('cryptoChart').addEventListener('click', (e)=>{
+function findHandleAt(mx,my){
+    if(!chart) return null;
+    const xs=chart.scales.x, ys=chart.scales.y;
+    for(const t of trendlines){
+        for(const which of ['1','2']){
+            const xv = which==='1'?t.x1:t.x2, yv = which==='1'?t.y1:t.y2;
+            const px = xs.getPixelForValue(xv), py = ys.getPixelForValue(yv);
+            if(Math.hypot(px-mx, py-my) <= TL_HIT_RADIUS) return { id:t.id, which };
+        }
+    }
+    return null;
+}
+
+const _tlCanvas = document.getElementById('cryptoChart');
+_tlCanvas.addEventListener('mousedown', (e)=>{
+    if(!chart || chartMode!=='zigzag' || !trendlines.length) return;
+    const {mx,my} = getEventXY(e);
+    const hit = findHandleAt(mx,my);
+    if(hit){
+        draggingHandle = hit;
+        chart.options.plugins.zoom.pan.enabled = false;
+        updateTrendlineCursor();
+        e.preventDefault();
+    }
+});
+window.addEventListener('mousemove',(e)=>{
+    if(!draggingHandle || !chart) return;
+    const pt = getDataCoordsFromEvent(e);
+    if(!pt) return;
+    const t = trendlines.find(x=>x.id===draggingHandle.id);
+    if(!t) return;
+    if(draggingHandle.which==='1'){ t.x1=pt.x; t.y1=pt.y; }
+    else{ t.x2=pt.x; t.y2=pt.y; }
+    renderTrendlines();
+});
+window.addEventListener('mouseup',()=>{
+    if(draggingHandle){
+        draggingHandle=null;
+        suppressNextClick=true;
+        chart.options.plugins.zoom.pan.enabled = true;
+        updateTrendlineCursor();
+    }
+});
+_tlCanvas.addEventListener('mousemove',(e)=>{
+    if(draggingHandle || !trendlines.length || trendlineMode) return;
+    const {mx,my}=getEventXY(e);
+    const hit=findHandleAt(mx,my);
+    _tlCanvas.style.cursor = hit ? 'grab' : 'default';
+});
+_tlCanvas.addEventListener('dblclick',(e)=>{
+    if(!trendlines.length) return;
+    const {mx,my}=getEventXY(e);
+    const hit=findHandleAt(mx,my);
+    if(hit){ removeTrendline(hit.id); e.preventDefault(); }
+});
+_tlCanvas.addEventListener('click', (e)=>{
+    if(suppressNextClick){ suppressNextClick=false; return; }
     if(!trendlineMode || chartMode!=='zigzag') return;
     const pt = getDataCoordsFromEvent(e);
     if(!pt) return;
@@ -1507,17 +1587,26 @@ document.getElementById('cryptoChart').addEventListener('click', (e)=>{
         trendlineDraft = null;
     }
 });
+
 function addTrendline(p1, p2){
     const id = 'tl'+(nextTrendlineId++);
     trendlines.push({ id, x1:p1.x, y1:p1.y, x2:p2.x, y2:p2.y });
     renderTrendlines();
-    showFeedback('✓ Tendance tracée ('+trendlines.length+' active(s))','ok');
+    updateTrendlineHint();
+    showFeedback('✓ Tendance tracée ('+trendlines.length+' active(s)) — glissez les poignées pour ajuster','ok');
+}
+function removeTrendline(id){
+    trendlines = trendlines.filter(t=>t.id!==id);
+    renderTrendlines();
+    updateTrendlineHint();
+    showFeedback('🗑 Tendance supprimée','pend');
 }
 function clearTrendlines(){
     if(!trendlines.length) return;
     trendlines = [];
     trendlineDraft = null;
     renderTrendlines();
+    updateTrendlineHint();
     showFeedback('🗑 Tendances effacées','pend');
 }
 function renderTrendlines(){
@@ -1525,20 +1614,29 @@ function renderTrendlines(){
     const annotations = {};
     const totalLen = chart.data.labels.length;
     trendlines.forEach(t=>{
-        /* Prolonge la droite au-delà du 2e point cliqué, jusqu'au bord
-           droit de la fenêtre (zone de padding vide comprise), pour
-           qu'elle avance avec le marché à chaque nouveau tick. */
-        const dx = t.x2 - t.x1;
-        const slope = dx !== 0 ? (t.y2 - t.y1) / dx : 0;
-        const xEnd = Math.max(t.x2, totalLen - 1);
-        const yEnd = dx !== 0 ? t.y1 + slope * (xEnd - t.x1) : t.y2;
-        annotations[t.id] = {
-            type: 'line',
-            xMin: t.x1, xMax: xEnd,
-            yMin: t.y1, yMax: yEnd,
-            borderColor: 'rgba(255,209,102,0.9)',
-            borderWidth: 2,
-            borderDash: []
+        annotations[t.id+'_line'] = {
+            type:'line', xMin:t.x1, xMax:t.x2, yMin:t.y1, yMax:t.y2,
+            borderColor:'rgba(255,209,102,0.95)', borderWidth:2
+        };
+        /* Prolongement en pointillé qui suit le marché, sans déplacer
+           les poignées (recalculé à partir de la pente réelle du segment
+           à chaque rendu). */
+        const dx=t.x2-t.x1;
+        if(dx>0 && t.x2 < totalLen-1){
+            const slope=(t.y2-t.y1)/dx;
+            const xEnd=totalLen-1, yEnd=t.y1+slope*(xEnd-t.x1);
+            annotations[t.id+'_ext'] = {
+                type:'line', xMin:t.x2, xMax:xEnd, yMin:t.y2, yMax:yEnd,
+                borderColor:'rgba(255,209,102,0.45)', borderWidth:2, borderDash:[6,4]
+            };
+        }
+        annotations[t.id+'_h1'] = {
+            type:'point', xValue:t.x1, yValue:t.y1, radius:TL_HANDLE_RADIUS,
+            backgroundColor:'#ffd166', borderColor:'#0d0f17', borderWidth:2
+        };
+        annotations[t.id+'_h2'] = {
+            type:'point', xValue:t.x2, yValue:t.y2, radius:TL_HANDLE_RADIUS,
+            backgroundColor:'#ffd166', borderColor:'#0d0f17', borderWidth:2
         };
     });
     chart.options.plugins.annotation.annotations = annotations;
@@ -1547,7 +1645,9 @@ function renderTrendlines(){
 function resetTrendlines(){
     trendlines = [];
     trendlineDraft = null;
+    draggingHandle = null;
     if(chart){ chart.options.plugins.annotation.annotations = {}; }
+    updateTrendlineHint();
 }
 
 /* ════════════════════════════════════════════
@@ -2624,6 +2724,7 @@ window.onload = async () => {
     fetchActiveStepSymbolsAndInit();
     updateDoubleLabel();
     loadPanelVisibility();
+    updateTrendlineHint();
     try{
         const savedParams = localStorage.getItem('param_panel_visible');
         if(savedParams === '0'){
