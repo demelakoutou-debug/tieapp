@@ -1292,9 +1292,15 @@ function renderTrendlines(){
     const xs = chart.scales.x, ys = chart.scales.y;
     if(!xs || !ys) return;
 
+    // dimensions réelles du calque en pixels (jamais de % — évite le bug "coin en haut à gauche")
+    const { w: layerW, h: layerH } = tlContainerRect();
+    svg.setAttribute('width', layerW);
+    svg.setAttribute('height', layerH);
+    svg.setAttribute('viewBox', `0 0 ${layerW} ${layerH}`);
+
     let html = '';
-    // rectangle invisible plein écran pour capter le clic "vide" et dessiner une nouvelle ligne
-    html += `<rect id="tl-canvas-catch" x="0" y="0" width="100%" height="100%" fill="transparent" style="pointer-events:${trendlineMode?'auto':'none'};cursor:crosshair;"></rect>`;
+    // rectangle invisible plein écran (dimensions explicites en px) pour capter le clic "vide" et dessiner une nouvelle ligne
+    html += `<rect id="tl-canvas-catch" x="0" y="0" width="${layerW}" height="${layerH}" fill="transparent" style="pointer-events:${trendlineMode?'auto':'none'};cursor:crosshair;"></rect>`;
     trendlines.forEach(tl=>{
         const p1 = tlDataToLocalPx(tl.x1, tl.y1);
         const p2 = tlDataToLocalPx(tl.x2, tl.y2);
@@ -1918,6 +1924,7 @@ function onParamsChanged(){updateChartData(false);if(chartMode==='renko')updateR
 let lTimer=null;
 function debounceLines(){clearTimeout(lTimer);lTimer=setTimeout(()=>{updatePriceLines();drawPeakLabels();renderTrendlines();},50);}
 window.addEventListener('wheel',debounceLines,{passive:true});
+window.addEventListener('resize',()=>{ if(chart) chart.resize(); renderTrendlines(); });
 
 function setDurType(type){
     durType=type;
