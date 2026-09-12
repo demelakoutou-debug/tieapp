@@ -340,33 +340,25 @@
            Overlay SVG calé sur la même zone que #chart-labels (mêmes
            insets) pour rester aligné avec le contenu réel du canvas
            Chart.js. Actif uniquement en vue "Zigzag" (pas en Renko). */
-        #trendline-layer { position:absolute; inset:10px 0 8px 10px; overflow:hidden; pointer-events:none; z-index:6; }
-        #trendline-layer.active { pointer-events:auto; cursor:crosshair; }
-        #trendline-layer .tl-line { stroke:#ffd166; stroke-width:2; pointer-events:auto; cursor:pointer; }
-        #trendline-layer .tl-line:hover { stroke:#ff4d6a; stroke-width:3; }
-        #trendline-layer .tl-preview { stroke:#ffd166; stroke-width:2; stroke-dasharray:6,4; opacity:.85; pointer-events:none; }
-
-        #trendline-controls {
-            position:absolute; top:8px; right:66px; z-index:9;
-            display:flex; gap:6px;
-        }
-        .tl-btn {
-            display:flex; align-items:center; justify-content:center;
-            width:28px; height:28px; border-radius:6px;
-            border:1px solid var(--border2); background:rgba(20,23,32,.88);
-            color:var(--muted); font-size:14px; cursor:pointer; transition:all .15s;
-        }
-        .tl-btn:hover { color:var(--text); background:#1e2335; }
-        .tl-btn.active { background:#ffd166; border-color:#ffd166; color:#000; box-shadow:0 0 10px rgba(255,209,102,.45); }
-        .tl-btn:disabled { opacity:.3; cursor:not-allowed; }
-        .tl-hint {
-            position:absolute; top:40px; right:66px; z-index:9;
-            font-size:9px; color:var(--muted); background:rgba(20,23,32,.85);
-            border:1px solid var(--border2); border-radius:5px; padding:4px 8px;
-            font-family:'JetBrains Mono',monospace; max-width:170px; text-align:right;
-            display:none;
-        }
-        .tl-hint.show { display:block; }
+       #trendline-layer.active { pointer-events: auto; }
+#trendline-layer .tl-hit  { stroke:transparent; stroke-width:16; cursor:grab; pointer-events:auto; }
+#trendline-layer .tl-line { stroke:#ffd166; stroke-width:2; pointer-events:none; }
+#trendline-layer .tl-handle {
+    fill:#3d7eff; stroke:#fff; stroke-width:1.5;
+    cursor:grab; pointer-events:auto;
+}
+#trendline-layer .tl-handle:hover { fill:#ffd166; }
+#tl-info-layer .tl-info {
+    position:absolute; transform:translate(8px,-50%);
+    display:flex; align-items:center; gap:6px;
+    background:rgba(20,23,32,.92); border:1px solid var(--border2);
+    border-radius:6px; padding:3px 6px; white-space:nowrap;
+    pointer-events:none; font-family:'JetBrains Mono',monospace; font-size:11px;
+}
+#tl-info-layer .tl-info-pct  { color:#000; font-weight:700; padding:1px 6px; border-radius:4px; }
+#tl-info-layer .tl-info-price{ color:var(--text); font-weight:600; }
+#tl-info-layer .tl-info-del  { background:none; border:none; color:var(--muted); cursor:pointer; font-size:11px; padding:0 2px; }
+#tl-info-layer .tl-info-del:hover { color:var(--red); }
     </style>
 </head>
 <body>
@@ -1408,27 +1400,30 @@ function initChart(){
 }
 
 /* ════════════════════════════════════════════
-   TRENDLINE — outil de mesure (nouveau)
-   ─────────────────────────────────────────
-   Overlay SVG (#trendline-layer) calé exactement comme #chart-labels
-   (mêmes insets) au-dessus du canvas Chart.js. On stocke chaque ligne
-   en coordonnées DATA (index sur l'axe X, prix sur l'axe Y) plutôt qu'en
-   pixels, afin qu'elle reste correctement positionnée quand on zoom/pan/
-   scroll (comme les peak-labels du fractal). Disponible uniquement en
-   vue Zigzag — désactivé et masqué en vue Renko.
+   TRENDLINE — style Deriv : apparition auto,
+   poignées glissables, déplacement de la ligne
 ════════════════════════════════════════════ */
-let trendlines = [];          // [{x1:idx, y1:price, x2:idx, y2:price}]
-let trendlineMode = false;    // mode "tracé" actif ?
-let tlDraft = null;           // ligne en cours de tracé {x1,y1} (data coords)
-let tlWasPanEnabled = true;   // pour restaurer le pan Chart.js après le mode dessin
+let trendlines = [];          // [{id,x1,y1,x2,y2}] en coords DATA (idx, prix)
+let trendlineMode = false;
+let tlNextId = 1;
+let tlDragState = null;       // {id, mode:'p1'|'p2'|'move', origX1,origY1,origX2,origY2, startData}
+let tlWasPanEnabled = true;
 
 function tlSvgEl(){ return document.getElementById('trendline-layer'); }
-
+function tlInfoLayer(){
+    let el = document.getElementById('tl-info-layer');
+    if(!el){
+        el = document.createElement('div');
+        el.id = 'tl-info-layer';
+        el.style.cssText = 'position:absolute;inset:10px 0 8px 10px;pointer-events:none;z-index:7;';
+        document.getElementById('chart-container').appendChild(el);
+    }
+    return el;
+}
 function tlContainerRect(){
     const el = tlSvgEl();
     return { w: el.offsetWidth || 1, h: el.offsetHeight || 1, rect: el.getBoundingClientRect() };
 }
-/* Convertit un point client (souris) en coordonnées DATA (idx, price) */
 function tlClientToData(clientX, clientY){
     if(!chart) return null;
     const { rect, w, h } = tlContainerRect();
@@ -1439,7 +1434,6 @@ function tlClientToData(clientX, clientY){
     if(!xs || !ys) return null;
     return { idx: xs.getValueForPixel(cx), price: ys.getValueForPixel(cy) };
 }
-/* Convertit des coordonnées DATA en coordonnées pixel LOCALES (dans le calque SVG) */
 function tlDataToLocalPx(idx, price){
     const xs = chart.scales.x, ys = chart.scales.y;
     const cx = xs.getPixelForValue(idx), cy = ys.getPixelForValue(price);
@@ -1448,35 +1442,97 @@ function tlDataToLocalPx(idx, price){
     return { x: cx / cvW * w, y: cy / cvH * h };
 }
 
+/* Crée une trendline diagonale par défaut, calée sur la zone visible
+   actuelle du graphique (comme quand tu cliques l'outil sur Deriv). */
+function tlCreateDefaultLine(){
+    if(!chart) return null;
+    const xs = chart.scales.x, ys = chart.scales.y;
+    if(!xs || !ys) return null;
+    const x1 = xs.min + (xs.max - xs.min) * 0.20;
+    const x2 = xs.min + (xs.max - xs.min) * 0.65;
+    const y1 = ys.min + (ys.max - ys.min) * 0.30;
+    const y2 = ys.min + (ys.max - ys.min) * 0.70;
+    return { id: tlNextId++, x1, y1, x2, y2 };
+}
+
 function renderTrendlines(){
     const svg = tlSvgEl();
-    if(!svg || !chart || chartMode!=='zigzag'){ if(svg) svg.innerHTML=''; return; }
+    const info = tlInfoLayer();
+    if(!svg || !chart || chartMode!=='zigzag'){ if(svg) svg.innerHTML=''; if(info) info.innerHTML=''; return; }
     const xs = chart.scales.x, ys = chart.scales.y;
     if(!xs || !ys) return;
+
     let html = '';
-    trendlines.forEach((tl,i)=>{
+    trendlines.forEach(tl=>{
         const p1 = tlDataToLocalPx(tl.x1, tl.y1);
         const p2 = tlDataToLocalPx(tl.x2, tl.y2);
-        html += `<line class="tl-line" data-idx="${i}" x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}"></line>`;
+        html += `<line class="tl-hit"  data-id="${tl.id}" data-action="move" x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}"></line>`;
+        html += `<line class="tl-line" data-id="${tl.id}" data-action="move" x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}"></line>`;
+        html += `<circle class="tl-handle" data-id="${tl.id}" data-action="p1" cx="${p1.x}" cy="${p1.y}" r="6"></circle>`;
+        html += `<circle class="tl-handle" data-id="${tl.id}" data-action="p2" cx="${p2.x}" cy="${p2.y}" r="6"></circle>`;
     });
-    if(tlDraft && tlDraft.curX!=null){
-        const p1 = tlDataToLocalPx(tlDraft.x1, tlDraft.y1);
-        const p2 = { x:tlDraft.curPxX, y:tlDraft.curPxY };
-        html += `<line class="tl-preview" x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}"></line>`;
-    }
     svg.innerHTML = html;
-    /* Clic sur une ligne existante = suppression (fonctionne même hors mode tracé) */
-    svg.querySelectorAll('.tl-line').forEach(line=>{
-        line.addEventListener('mousedown', e=>{
+
+    /* Bulle d'info (%, prix, bouton suppr.) ancrée sur le 2e point */
+    info.innerHTML = trendlines.map(tl=>{
+        const p2 = tlDataToLocalPx(tl.x2, tl.y2);
+        const pct = tl.y1 !== 0 ? ((tl.y2 - tl.y1) / tl.y1 * 100) : 0;
+        const pctColor = pct >= 0 ? 'var(--green)' : 'var(--red)';
+        return `<div class="tl-info" data-id="${tl.id}" style="left:${p2.x}px;top:${p2.y}px;">
+            <span class="tl-info-pct" style="background:${pctColor}">${pct>=0?'+':''}${pct.toFixed(2)}%</span>
+            <span class="tl-info-price">${fmt1(tl.y2)}</span>
+            <button class="tl-info-del" data-id="${tl.id}" title="Supprimer">🗑</button>
+        </div>`;
+    }).join('');
+
+    svg.querySelectorAll('.tl-handle, .tl-hit').forEach(el=>{
+        el.addEventListener('mousedown', tlOnHandleMouseDown);
+    });
+    info.querySelectorAll('.tl-info-del').forEach(btn=>{
+        btn.style.pointerEvents = 'auto';
+        btn.addEventListener('mousedown', e=>{
             e.stopPropagation();
-            const idx = parseInt(line.getAttribute('data-idx'));
-            removeTrendline(idx);
+            removeTrendline(parseInt(btn.getAttribute('data-id')));
         });
     });
 }
 
+function tlOnHandleMouseDown(e){
+    if(!trendlineMode) return;
+    e.stopPropagation(); e.preventDefault();
+    const id = parseInt(e.currentTarget.getAttribute('data-id'));
+    const action = e.currentTarget.getAttribute('data-action');
+    const tl = trendlines.find(t=>t.id===id);
+    if(!tl) return;
+    const startData = tlClientToData(e.clientX, e.clientY);
+    tlDragState = { id, mode:action, origX1:tl.x1, origY1:tl.y1, origX2:tl.x2, origY2:tl.y2, startData };
+
+    const onMove = (ev)=>{
+        const d = tlClientToData(ev.clientX, ev.clientY);
+        if(!d || !tlDragState) return;
+        const t = trendlines.find(t=>t.id===tlDragState.id);
+        if(!t) return;
+        if(tlDragState.mode==='p1'){ t.x1 = d.idx; t.y1 = d.price; }
+        else if(tlDragState.mode==='p2'){ t.x2 = d.idx; t.y2 = d.price; }
+        else { // move : translation globale
+            const dx = d.idx - tlDragState.startData.idx;
+            const dy = d.price - tlDragState.startData.price;
+            t.x1 = tlDragState.origX1 + dx; t.y1 = tlDragState.origY1 + dy;
+            t.x2 = tlDragState.origX2 + dx; t.y2 = tlDragState.origY2 + dy;
+        }
+        renderTrendlines();
+    };
+    const onUp = ()=>{
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+        tlDragState = null;
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+}
+
 function toggleTrendlineMode(){
-    if(chartMode!=='zigzag') return; // sécurité, le bouton est désactivé en Renko de toute façon
+    if(chartMode!=='zigzag') return;
     trendlineMode = !trendlineMode;
     const btn = document.getElementById('btn-trendline');
     const svg = tlSvgEl();
@@ -1484,57 +1540,32 @@ function toggleTrendlineMode(){
     btn.classList.toggle('active', trendlineMode);
     svg.classList.toggle('active', trendlineMode);
     hint.classList.toggle('show', trendlineMode);
+
     if(chart && chart.options.plugins.zoom){
         if(trendlineMode){
             tlWasPanEnabled = chart.options.plugins.zoom.pan.enabled;
-            chart.options.plugins.zoom.pan.enabled = false; // évite que le drag panne le graphique pendant le tracé
+            chart.options.plugins.zoom.pan.enabled = false;
         } else {
             chart.options.plugins.zoom.pan.enabled = tlWasPanEnabled;
         }
     }
+    /* Apparition automatique : si on active l'outil et qu'aucune ligne
+       n'existe encore, on en place une par défaut à étirer. */
+    if(trendlineMode && trendlines.length===0){
+        const tl = tlCreateDefaultLine();
+        if(tl) trendlines.push(tl);
+    }
+    renderTrendlines();
 }
 function clearTrendlines(){
     trendlines = [];
-    tlDraft = null;
     renderTrendlines();
     showFeedback('🗑 Trendlines effacées','ok');
 }
-function removeTrendline(idx){
-    if(idx<0 || idx>=trendlines.length) return;
-    trendlines.splice(idx,1);
+function removeTrendline(id){
+    trendlines = trendlines.filter(t=>t.id!==id);
     renderTrendlines();
 }
-
-/* Gestion souris : dessin cliquer-glisser sur le calque SVG */
-(function initTrendlineMouseHandlers(){
-    const svg = tlSvgEl();
-    svg.addEventListener('mousedown', e=>{
-        if(!trendlineMode || chartMode!=='zigzag') return;
-        if(e.target.classList && e.target.classList.contains('tl-line')) return; // géré par le handler de suppression
-        const d = tlClientToData(e.clientX, e.clientY);
-        if(!d) return;
-        tlDraft = { x1:d.idx, y1:d.price, curX:d.idx, curPxX:null, curPxY:null };
-        const onMove = (ev)=>{
-            const local = tlSvgEl().getBoundingClientRect();
-            tlDraft.curPxX = ev.clientX - local.left;
-            tlDraft.curPxY = ev.clientY - local.top;
-            renderTrendlines();
-        };
-        const onUp = (ev)=>{
-            window.removeEventListener('mousemove', onMove);
-            window.removeEventListener('mouseup', onUp);
-            const d2 = tlClientToData(ev.clientX, ev.clientY);
-            if(d2 && (Math.abs(d2.idx - tlDraft.x1) > 0.4 || Math.abs(d2.price - tlDraft.y1) > 0)){
-                trendlines.push({ x1:tlDraft.x1, y1:tlDraft.y1, x2:d2.idx, y2:d2.price });
-            }
-            tlDraft = null;
-            renderTrendlines();
-        };
-        window.addEventListener('mousemove', onMove);
-        window.addEventListener('mouseup', onUp);
-        e.preventDefault();
-    });
-})();
 
 /* ════════════════════════════════════════════
    GRAPHIQUE RENKO — vue alternative, basculable
