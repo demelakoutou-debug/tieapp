@@ -335,16 +335,6 @@
         }
         .stb-chip.comp { background:rgba(0,200,150,.18); border-color:rgba(0,200,150,.5); color:var(--green); }
         .stb-chip.std  { background:rgba(255,77,106,.18); border-color:rgba(255,77,106,.5); color:var(--red); }
-
-        /* ── Trendline / mesure ── */
-        .trendline-label {
-            position:absolute; font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:700;
-            padding:3px 7px; border-radius:4px; white-space:nowrap; pointer-events:none;
-            background:var(--surface2); border:1px solid var(--border2); color:var(--text);
-            box-shadow:0 1px 4px rgba(0,0,0,.5); transform:translate(-50%,-50%); z-index:6;
-        }
-        .trendline-label.up { border-color:rgba(0,200,150,.5); color:var(--green); }
-        .trendline-label.down { border-color:rgba(255,77,106,.5); color:var(--red); }
     </style>
 </head>
 <body>
@@ -353,7 +343,7 @@
 
 <!-- ═══ HEADER ═══ -->
 <header>
-    <div class="logo"><span class="logo-dot"></span>TieAPP</div>
+    <div class="logo"><img src="data:image/png;base64,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" alt="TieAPP"></div>
     <div class="vdiv"></div>
     <div class="market-wrap">
         <select id="market-select">
@@ -374,8 +364,6 @@
     <button class="btn" onclick="resetZoom()">↺ Reset</button>
     <button class="btn active" id="btn-params-toggle" onclick="toggleParamPanel()">⚙ Params</button>
     <button class="btn" id="btn-chart-mode" onclick="toggleChartMode()">📊 Vue: Zigzag</button>
-    <button class="btn" id="btn-trendline" onclick="toggleTrendlineMode()" title="Tracer une ligne pour mesurer un écart de prix">📏 Trendline</button>
-    <button class="btn" id="btn-trendline-clear" onclick="clearTrendlines()" style="display:none;" title="Supprimer toutes les lignes de mesure">🗑 Effacer lignes</button>
     <div class="vdiv"></div>
     <div class="param-panel" id="param-panel">
         <div class="param-section" id="param-sar">
@@ -663,13 +651,11 @@
             <div class="price-badge" id="badge-high"><div class="badge-tag" id="btag-high">—</div></div>
             <div class="price-badge" id="badge-low" ><div class="badge-tag" id="btag-low">—</div></div>
             <div class="price-badge" id="badge-curr"><div class="badge-tag" id="btag-curr">—</div></div>
-            <svg id="trendline-svg" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;"></svg>
         </div>
         <div class="hint" id="chart-hint">
             <span><span class="hkey">Scroll</span>Zoom X</span>
             <span><span class="hkey">Drag</span>Déplacer</span>
             <span><span class="hkey">↕ Axe Y</span>Étirer</span>
-            <span><span class="hkey">📏</span>2 clics = mesurer</span>
         </div>
     </div>
     <div id="y-drag-zone"><span id="y-drag-hint">↕ SCALE</span></div>
@@ -750,6 +736,22 @@ function resetParamGroup(group){
 
 /* ════════════════════════════════════════════
    SUPERTREND INCRÉMENTAL
+   ─────────────────────────────────────────
+   ⚠️ FIX BUG "fausses cassures" : le SuperTrend était recalculé depuis
+   zéro sur une fenêtre glissante à CHAQUE tick (optimisation perf). Le
+   problème : à chaque recalcul, le "point de départ" de la fenêtre
+   change (un tick plus loin), ce qui réamorce le mécanisme en cascade
+   (upper/lower/trend) avec un nouveau point de départ arbitraire — et
+   pouvait faire basculer la classification de tendance SANS aucun vrai
+   mouvement de prix significatif. D'où des cassures fantômes qui
+   redémarraient le compteur à zéro alors qu'il n'y avait pas de vraie
+   cassure.
+   Le calcul est maintenant INCRÉMENTAL : un état persistant (bande haute/
+   basse, tendance, fenêtre glissante pour l'écart-type) avance d'UN seul
+   tick à chaque nouveau prix, jamais réamorcé — sauf reconstruction
+   volontaire complète (chargement d'historique, changement de marché,
+   ou changement des paramètres Période/Mult, qui redéfinissent le calcul
+   et doivent repartir proprement).
 ════════════════════════════════════════════ */
 let stBullArr = [];  // aligné 1:1 avec ticksData.prices
 let stBearArr = [];
@@ -761,6 +763,10 @@ function resetSTIncremental(){
 }
 function stStepOne(price, period, mult){
     if(stIncr.period !== period || stIncr.mult !== mult){
+        /* Changement de paramètre en cours de route : l'état ratchet
+           précédent n'a plus de sens avec les nouveaux réglages, on le
+           réinitialise proprement (mais on garde prevPrice pour ne pas
+           perdre un point de continuité). */
         stIncr.period = period; stIncr.mult = mult;
         stIncr.sumP = 0; stIncr.sumSqP = 0; stIncr.buf = [];
         stIncr.upper = null; stIncr.lower = null; stIncr.trend = 0; stIncr.ready = false;
@@ -823,7 +829,7 @@ function stStepNewTick(price){
     const r = stStepOne(price, period, mult);
     stBullArr.push(r.bull);
     stBearArr.push(r.bear);
-    if(stBullArr.length > 6000){ stBullArr.shift(); stBearArr.shift(); }
+    if(stBullArr.length > 6000){ stBullArr.shift(); stBearArr.shift(); } // reste aligné avec le cap de ticksData
     if(showST && r.ready) trackSTBreak(r.trend);
 }
 
@@ -847,166 +853,17 @@ function tradeSymbol(){ return TRADE_SYMBOL_MAP[currentSymbol]||currentSymbol; }
 const fmt1 = v => v != null ? v.toFixed(1) : '—';
 
 /* ════════════════════════════════════════════
-   TRENDLINE / OUTIL DE MESURE
-   ─────────────────────────────────────────
-   Objectif : permettre de tracer une ligne entre 2 points du graphique
-   (comme une règle) pour mesurer l'écart de prix et le nombre de ticks
-   entre ces deux points — utile pour évaluer l'amplitude d'un mouvement.
-
-   Fonctionnement :
-   - Le bouton "📏 Trendline" du header active/désactive le mode.
-     Quand il est actif, les lignes déjà tracées restent visibles et un
-     clic sur le graphique place un point ; un second clic trace la ligne
-     et affiche l'écart de prix / nombre de ticks au milieu du segment.
-   - Quand le mode est désactivé, l'overlay est masqué (les lignes restent
-     en mémoire, rien n'est perdu) — le réactiver les fait réapparaître.
-   - Un clic direct sur une ligne déjà tracée la supprime immédiatement.
-   - Le bouton "🗑 Effacer lignes" supprime toutes les lignes d'un coup.
-   - Les lignes sont exprimées en (index de tick, prix) et donc
-     recalculées en pixels à chaque update/zoom/pan du graphique, comme
-     les autres overlays (peak-labels, price-lines).
-════════════════════════════════════════════ */
-let trendlineMode = false;
-let trendlinePending = null;   // {idx, price} en attente du 2e clic
-let trendlines = [];           // [{idx1, price1, idx2, price2}]
-let _tlPointerDown = null;
-
-function toggleTrendlineMode(){
-    trendlineMode = !trendlineMode;
-    trendlinePending = null;
-    const btn = document.getElementById('btn-trendline');
-    btn.classList.toggle('active', trendlineMode);
-    const canvasEl = document.getElementById('cryptoChart');
-    if(canvasEl) canvasEl.style.cursor = trendlineMode ? 'crosshair' : '';
-    document.getElementById('btn-trendline-clear').style.display = trendlines.length ? '' : 'none';
-    showFeedback(
-        trendlineMode ? '📏 Mode Trendline activé — cliquez 2 points pour mesurer (clic sur une ligne = supprimer)' : '📏 Mode Trendline désactivé',
-        'pend'
-    );
-    renderTrendlines();
-}
-function clearTrendlines(){
-    trendlines = [];
-    trendlinePending = null;
-    document.getElementById('btn-trendline-clear').style.display = 'none';
-    renderTrendlines();
-    showFeedback('🗑 Lignes de mesure effacées','ok');
-}
-function removeTrendline(i){
-    if(i<0 || i>=trendlines.length) return;
-    trendlines.splice(i,1);
-    if(!trendlines.length) document.getElementById('btn-trendline-clear').style.display='none';
-    renderTrendlines();
-}
-function chartAreaPixelMap(){
-    if(!chart) return null;
-    const ca=chart.chartArea, cvW=chart.canvas.offsetWidth, cvH=chart.canvas.offsetHeight;
-    const cont=document.getElementById('chart-labels');
-    const cW=cont.offsetWidth, cH=cont.offsetHeight;
-    const xs=chart.scales.x, ys=chart.scales.y;
-    if(!xs||!ys||ys.max===ys.min||!cvW||!cvH) return null;
-    const drawLeft=(ca.left/cvW)*cW, drawRight=(ca.right/cvW)*cW;
-    const drawTop=(ca.top/cvH)*cH, drawBot=(ca.bottom/cvH)*cH;
-    return { xs, ys, drawLeft, drawTop, drawW:drawRight-drawLeft, drawH:drawBot-drawTop };
-}
-function idxPriceToPixel(idx, price, map){
-    const { xs, ys, drawLeft, drawTop, drawW, drawH } = map;
-    const xPx = drawLeft + (idx - xs.min)/(xs.max - xs.min) * drawW;
-    const yPx = drawTop + (1 - (price - ys.min)/(ys.max - ys.min)) * drawH;
-    return { x:xPx, y:yPx };
-}
-function handleTrendlinePoint(clientX, clientY, canvasEl){
-    if(!chart || chartMode!=='zigzag') return;
-    const rect = canvasEl.getBoundingClientRect();
-    const xPx = clientX - rect.left;
-    const yPx = clientY - rect.top;
-    const idx = chart.scales.x.getValueForPixel(xPx);
-    const price = chart.scales.y.getValueForPixel(yPx);
-    if(idx==null || price==null || isNaN(idx) || isNaN(price)) return;
-    if(!trendlinePending){
-        trendlinePending = { idx, price };
-        renderTrendlines();
-    } else {
-        trendlines.push({ idx1:trendlinePending.idx, price1:trendlinePending.price, idx2:idx, price2:price });
-        trendlinePending = null;
-        document.getElementById('btn-trendline-clear').style.display = '';
-        renderTrendlines();
-        const last = trendlines[trendlines.length-1];
-        const dP = last.price2 - last.price1;
-        const dT = Math.round(last.idx2 - last.idx1);
-        showFeedback('📏 Mesure: Δprix '+(dP>=0?'+':'')+fmt1(dP)+'  |  '+Math.abs(dT)+' ticks','ok');
-    }
-}
-function renderTrendlines(){
-    const svg = document.getElementById('trendline-svg');
-    if(!svg) return;
-    document.getElementById('chart-labels').querySelectorAll('.trendline-label').forEach(e=>e.remove());
-    svg.innerHTML = '';
-    if(chartMode!=='zigzag' || !trendlineMode){
-        svg.style.display = 'none';
-        return;
-    }
-    svg.style.display = '';
-    const map = chartAreaPixelMap();
-    if(!map) return;
-
-    const cont = document.getElementById('chart-labels');
-    const drawSegment = (p1, price1, p2, price2, opts) => {
-        const up = price2 >= price1;
-        const color = up ? '#00c896' : '#ff4d6a';
-        const line = document.createElementNS('http://www.w3.org/2000/svg','line');
-        line.setAttribute('x1', p1.x); line.setAttribute('y1', p1.y);
-        line.setAttribute('x2', p2.x); line.setAttribute('y2', p2.y);
-        line.setAttribute('stroke', color);
-        line.setAttribute('stroke-width', opts.pending ? '1.5' : '2');
-        line.setAttribute('stroke-dasharray', opts.pending ? '3 3' : '5 3');
-        if(!opts.pending){
-            line.style.pointerEvents = 'stroke';
-            line.style.cursor = 'pointer';
-            line.addEventListener('click', (e)=>{ e.stopPropagation(); removeTrendline(opts.index); });
-        }
-        svg.appendChild(line);
-        [p1,p2].forEach(p=>{
-            const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
-            c.setAttribute('cx', p.x); c.setAttribute('cy', p.y); c.setAttribute('r','3.5');
-            c.setAttribute('fill', color);
-            if(!opts.pending){ c.style.pointerEvents='all'; c.style.cursor='pointer';
-                c.addEventListener('click', (e)=>{ e.stopPropagation(); removeTrendline(opts.index); }); }
-            svg.appendChild(c);
-        });
-        if(!opts.pending){
-            const dP = price2 - price1;
-            const dT = Math.round(opts.idx2 - opts.idx1);
-            const pct = price1 !== 0 ? (dP/price1*100) : 0;
-            const midX = (p1.x+p2.x)/2, midY = (p1.y+p2.y)/2;
-            const lbl = document.createElement('div');
-            lbl.className = 'trendline-label ' + (up ? 'up':'down');
-            lbl.innerText = (dP>=0?'▲ +':'▼ ')+fmt1(dP)+'  ('+Math.abs(dT)+' ticks, '+(pct>=0?'+':'')+pct.toFixed(2)+'%)';
-            lbl.style.left = midX+'px';
-            lbl.style.top = midY+'px';
-            lbl.title = 'Cliquer sur la ligne pour la supprimer';
-            cont.appendChild(lbl);
-        }
-    };
-
-    trendlines.forEach((tl,i)=>{
-        const p1 = idxPriceToPixel(tl.idx1, tl.price1, map);
-        const p2 = idxPriceToPixel(tl.idx2, tl.price2, map);
-        drawSegment(p1, tl.price1, p2, tl.price2, { pending:false, index:i, idx1:tl.idx1, idx2:tl.idx2 });
-    });
-    if(trendlinePending){
-        // Petit repère pour le point en attente du 2e clic
-        const p1 = idxPriceToPixel(trendlinePending.idx, trendlinePending.price, map);
-        const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
-        c.setAttribute('cx', p1.x); c.setAttribute('cy', p1.y); c.setAttribute('r','4');
-        c.setAttribute('fill', '#3d7eff');
-        c.setAttribute('stroke', '#fff'); c.setAttribute('stroke-width','1');
-        svg.appendChild(c);
-    }
-}
-
-/* ════════════════════════════════════════════
    RÉSOLUTION DYNAMIQUE DES SYMBOLES STEP INDEX
+   ─────────────────────────────────────────
+   ⚠️ FIX RACINE : le log console a révélé que "stpRNG5" (et probablement
+   les autres codes codés en dur type stpRNG2/3/4) sont acceptés par
+   ticks_history (données historiques) mais REJETÉS par l'abonnement ticks
+   temps réel ("InvalidSymbol"). Autrement dit ces codes sont périmés côté
+   Deriv pour le live, même s'ils marchent encore pour l'historique.
+   Plutôt que deviner d'autres noms, on interroge Deriv lui-même
+   ("active_symbols") pour récupérer la liste réelle et actuelle des
+   marchés Step Index, et on reconstruit le sélecteur avec ces symboles
+   garantis valides pour le flux temps réel.
 ════════════════════════════════════════════ */
 function fetchActiveStepSymbolsAndInit(){
     let done=false;
@@ -1019,6 +876,12 @@ function fetchActiveStepSymbolsAndInit(){
     };
     const timeout=setTimeout(fallback,6000);
     probe.onopen=()=>{
+        /* ⚠️ landing_company:'svg' est nécessaire : sans authentification,
+           active_symbols se base sur la géolocalisation de l'IP pour
+           déduire la landing company, et celle-ci n'inclut pas forcément
+           les indices synthétiques (Step/Volatility/Boom-Crash), qui ne
+           sont proposés que sous "svg" (Deriv (SVG) LLC). C'est
+           probablement pourquoi la liste revenait vide. */
         probe.send(JSON.stringify({active_symbols:'brief', product_type:'basic', landing_company:'svg'}));
     };
     probe.onmessage=evt=>{
@@ -1050,11 +913,12 @@ function fetchActiveStepSymbolsAndInit(){
                     sel.appendChild(opt);
                     TRADE_SYMBOL_MAP[s.symbol]=s.symbol;
                 });
+                /* Garder "Step 500" sélectionné par défaut si présent, sinon le dernier de la liste */
                 const step500=steps.find(s=>/500/.test(s.display_name));
                 currentSymbol=step500?step500.symbol:steps[steps.length-1].symbol;
                 sel.value=currentSymbol;
             } else {
-                console.warn('[Deriv] Aucun symbole "Step" trouvé même avec landing_company=svg.');
+                console.warn('[Deriv] Aucun symbole "Step" trouvé même avec landing_company=svg. Voir la liste complète des indices synthétiques ci-dessus (log précédent) pour identifier le bon nom/submarket à utiliser.');
                 if(all.length===0){
                     console.warn('[Deriv] La réponse active_symbols est totalement vide — problème réseau/serveur, pas seulement de filtrage.');
                 }
@@ -1068,10 +932,16 @@ function fetchActiveStepSymbolsAndInit(){
 
 /* ════════════════════════════════════════════
    TRADING — ARCHITECTURE PKCE + REST + OTP + WS
+   ─────────────────────────────────────────
+   1. PKCE → auth.deriv.com → code dans URL
+   2. Échange code → access_token (POST /oauth2/token)
+   3. GET /trading/v1/options/accounts → liste DOT/ROT
+   4. POST /accounts/{id}/otp → wsUrl authentifiée
+   5. WebSocket sur wsUrl → trades (proposal+buy)
 ════════════════════════════════════════════ */
 
-let accessToken    = null;
-let wsTrading      = null;
+let accessToken    = null;   // Bearer token OAuth
+let wsTrading      = null;   // WebSocket de trading
 let tradeAuthorized= false;
 
 let statsTotal=0, statsWin=0, statsLoss=0, statsPnl=0.0;
@@ -1161,6 +1031,7 @@ async function fetchDerivAccounts(){
     const json=await resp.json();
     const accounts = json.data||[];
     if(accounts.length===0){
+        /* Créer un compte démo si aucun n'existe */
         await fetch('https://api.derivws.com/trading/v1/options/accounts',{
             method:'POST',
             headers:{
@@ -1213,9 +1084,17 @@ function openTradingWS(wsUrl, accountId){
         setBtnConnect('connected','Connecté ✓');
         document.getElementById('btn-disconnect').style.display='inline-block';
         showFeedback('✓ Connecté — '+label+' '+accountId,'ok');
+        /* Souscrire au solde en temps réel */
         wsTrading.send(JSON.stringify({balance:1, subscribe:1}));
+        /* ⚠️ FIX RACINE : les ticks live des Step Index sont rejetés
+           ("InvalidSymbol") sur le canal PUBLIC anonyme (app_id=1089), mais
+           fonctionnent normalement sur la WebSocket AUTHENTIFIÉE du compte
+           (celle-ci, obtenue via OAuth+OTP). On y souscrit donc les ticks
+           ici, et on coupe le repli par polling qui compensait leur
+           absence pour les utilisateurs non connectés. */
         subscribeTradingTicks();
         stopPublicPolling();
+        /* Keepalive ping toutes les 25s */
         wsTrading._pingTimer=setInterval(()=>{
             if(wsTrading&&wsTrading.readyState===WebSocket.OPEN)
                 wsTrading.send(JSON.stringify({ping:1}));
@@ -1232,6 +1111,8 @@ function openTradingWS(wsUrl, accountId){
         tradeAuthorized=false;
         document.getElementById('btn-disconnect').style.display='none';
         setBtnConnect('','🔐 Connexion Deriv');
+        /* Plus de ticks live authentifiés — reprendre le repli par polling
+           public en attendant la reconnexion (ou la déconnexion définitive). */
         startPublicPolling();
         if(wsTrading&&!wsTrading._noReconnect){
             setTokStatus('Déconnecté — reconnexion dans 5s…','var(--muted)');
@@ -1260,10 +1141,13 @@ function subscribeTradingTicks(){
 
 /* ════════════════════════════════════════════
    HANDLER MESSAGES TRADING
+   — Gère proposal, buy, proposal_open_contract
+   — Comptage gains/pertes/P&L
 ════════════════════════════════════════════ */
 function _handleTradingMessage(d){
     if(!d || !d.msg_type) return;
 
+    /* ── Tick live du graphique (canal authentifié — voir subscribeTradingTicks) ── */
     if(d.msg_type==='tick'){
         if(d.error){
             console.warn('[Deriv Trading WS] erreur ticks:', d.error.code, d.error.message);
@@ -1276,6 +1160,7 @@ function _handleTradingMessage(d){
         return;
     }
 
+    /* ── Solde mis à jour en temps réel ── */
     if(d.msg_type==='balance'&&!d.error&&d.balance){
         const bal=parseFloat(d.balance.balance).toFixed(2);
         const cur=d.balance.currency||'USD';
@@ -1300,6 +1185,7 @@ function _handleTradingMessage(d){
         return;
     }
 
+    /* ── Buy confirmé ── */
     if(d.msg_type==='buy'){
         if(d.error){
             const det=d.error.details?' ('+JSON.stringify(d.error.details)+')':'';
@@ -1312,6 +1198,7 @@ function _handleTradingMessage(d){
             openContracts[b.contract_id]={buy_price:parseFloat(b.buy_price)};
             updateStatsDisplay();
             showFeedback('✓ Contrat #'+b.contract_id+' | achat $'+parseFloat(b.buy_price).toFixed(2),'ok');
+            /* Souscrire au suivi du contrat pour connaître le résultat */
             wsTrading.send(JSON.stringify({
                 proposal_open_contract: 1,
                 contract_id: b.contract_id,
@@ -1321,6 +1208,7 @@ function _handleTradingMessage(d){
         return;
     }
 
+    /* ── Résultat du contrat (gain/perte) ── */
     if(d.msg_type==='proposal_open_contract'){
         if(d.error) return;
         const poc=d.proposal_open_contract;
@@ -1352,6 +1240,7 @@ function _handleTradingMessage(d){
         return;
     }
 
+    /* ── Erreur générique ── */
     if(d.msg_type==='error'){
         showFeedback('❌ '+d.error.message,'err');
     }
@@ -1372,8 +1261,10 @@ async function switchTradingAccount(accountId){
 /* ════ Flux complet de connexion OAuth ════ */
 async function connectDeriv(){
     try{
+        /* Récupérer la liste des comptes */
         const accounts=await fetchDerivAccounts();
 
+        /* Construire le sélecteur de compte dans la trade bar */
         let sel=document.getElementById('account-switcher');
         if(!sel){
             sel=document.createElement('select');
@@ -1392,8 +1283,14 @@ async function connectDeriv(){
             sel.appendChild(opt);
         });
 
+        /* Sauvegarder token pour restauration */
         try{localStorage.setItem('access_token',accessToken);localStorage.setItem('is_logged','true');}catch(e){}
 
+        /* ⚠️ Connecter automatiquement le compte DEMO (DOT) en priorité —
+           le compte réel (ROT) reste accessible manuellement via le menu
+           déroulant "account-switcher", mais ce n'est jamais le compte
+           utilisé par défaut à la connexion ni à un rafraîchissement de
+           l'interface, afin d'éviter tout trade accidentel en réel. */
         const demoAcc=accounts.find(a=>a.account_type==='demo')||accounts[0];
         sel.value=demoAcc.account_id;
         await switchTradingAccount(demoAcc.account_id);
@@ -1456,10 +1353,7 @@ function initChart(){
             },
             plugins:{
                 legend:{display:false},tooltip:{enabled:false},
-                zoom:{
-                    pan:{enabled:true,mode:'x',threshold:5,onPan:()=>renderTrendlines(),onPanComplete:()=>renderTrendlines()},
-                    zoom:{wheel:{enabled:true,speed:0.07},pinch:{enabled:true},mode:'x',onZoom:()=>renderTrendlines(),onZoomComplete:()=>renderTrendlines()}
-                }
+                zoom:{pan:{enabled:true,mode:'x',threshold:5},zoom:{wheel:{enabled:true,speed:0.07},pinch:{enabled:true},mode:'x'}}
             }
         }
     });
@@ -1474,6 +1368,18 @@ function initChart(){
 
 /* ════════════════════════════════════════════
    GRAPHIQUE RENKO — vue alternative, basculable
+   ─────────────────────────────────────────
+   Contrairement au graphique "zigzag" (un point par tick, axe du temps),
+   le Renko ignore le temps : une nouvelle "brique" n'apparaît que quand
+   le prix a bougé d'au moins une taille de brique fixe dans une
+   direction. Ça filtre tout le bruit tick-à-tick et ne montre que les
+   vrais changements de direction — particulièrement adapté à un Step
+   Index puisque le marché bouge déjà par paliers fixes.
+   Rendu via un second canvas (Chart.js type 'bar', barres flottantes
+   [prix_bas, prix_haut] colorées vert/rouge selon la direction de la
+   brique), affiché à la place du graphique zigzag quand la vue Renko
+   est active — le zigzag continue d'exister et reste immédiatement
+   disponible en rebasculant.
 ════════════════════════════════════════════ */
 let chartMode = 'zigzag'; // 'zigzag' | 'renko'
 let renkoChart = null;
@@ -1491,9 +1397,11 @@ function toggleChartMode(){
     btn.classList.toggle('active', chartMode==='renko');
     if(chartMode==='renko'){
         initRenkoChartIfNeeded();
+        /* Le canvas vient de passer de display:none à visible : Chart.js
+           a besoin d'un resize explicite pour recalculer ses dimensions,
+           sinon il peut garder une taille de 0 calculée au moment de sa
+           création (comportement déjà vu sur des canvas masqués/révélés). */
         requestAnimationFrame(()=>{ if(renkoChart) renkoChart.resize(); updateRenkoChart(); });
-    } else {
-        renderTrendlines();
     }
 }
 function initRenkoChartIfNeeded(){
@@ -1511,6 +1419,14 @@ function initRenkoChartIfNeeded(){
                 x:{ grid:{color:'rgba(37,42,58,.9)'}, ticks:{display:false}, border:{color:'#252a3a'} },
                 y:{
                     position:'right',
+                    /* ⚠️ FIX PRINCIPAL : Chart.js met beginAtZero:true par
+                       défaut sur l'axe des valeurs pour le type 'bar'. Les
+                       prix d'un Step Index tournent autour de plusieurs
+                       milliers (ex: ~9990), donc avec 0 inclus dans
+                       l'échelle, toutes les briques se retrouvaient
+                       écrasées dans un pixel en haut du graphique —
+                       visuellement invisibles bien que les données soient
+                       correctement calculées. */
                     beginAtZero:false,
                     grace:'10%',
                     grid:{color:'rgba(37,42,58,.9)'},
@@ -1538,8 +1454,8 @@ function calculateRenko(prices, brickSize){
     }
     return bricks;
 }
-const RENKO_SOURCE_CAP = 3000;
-const RENKO_DISPLAY_CAP = 150;
+const RENKO_SOURCE_CAP = 3000; // ticks source max pour le calcul (perf)
+const RENKO_DISPLAY_CAP = 150; // briques affichées max (lisibilité)
 function updateRenkoChart(){
     if(!renkoChart) return;
     const brickSize = parseFloat(document.getElementById('renko-brick').value) || 0.3;
@@ -1585,45 +1501,11 @@ window.addEventListener('mousemove',e=>{
     const hr=(yDrag.range/2)*factor;
     chart.scales.y.options.min=mid-hr;
     chart.scales.y.options.max=mid+hr;
-    chart.update('none');updatePriceLines();renderTrendlines();
+    chart.update('none');updatePriceLines();
 });
 window.addEventListener('mouseup',()=>{
     if(yDrag.active){yDrag.active=false;document.getElementById('y-drag-zone').classList.remove('dragging');}
 });
-
-/* ════════════════════════════════════════════
-   TRENDLINE — écouteurs souris/tactile sur le canvas
-   ─────────────────────────────────────────
-   On mesure le déplacement entre mousedown et mouseup pour ne déclencher
-   un "clic de mesure" que si le pointeur n'a quasiment pas bougé — sinon
-   un pan (glissé horizontal du graphique) serait interprété à tort comme
-   un clic de placement de point.
-════════════════════════════════════════════ */
-(function setupTrendlineListeners(){
-    const canvasEl = document.getElementById('cryptoChart');
-    if(!canvasEl) return;
-    canvasEl.addEventListener('mousedown', e=>{ _tlPointerDown = {x:e.clientX, y:e.clientY}; });
-    canvasEl.addEventListener('mouseup', e=>{
-        if(!trendlineMode || !_tlPointerDown) return;
-        const dx=e.clientX-_tlPointerDown.x, dy=e.clientY-_tlPointerDown.y;
-        _tlPointerDown=null;
-        if(Math.sqrt(dx*dx+dy*dy) > 6) return;
-        handleTrendlinePoint(e.clientX, e.clientY, canvasEl);
-    });
-    canvasEl.addEventListener('touchstart', e=>{
-        if(!trendlineMode) return;
-        const t=e.touches[0]; if(!t) return;
-        _tlPointerDown={x:t.clientX,y:t.clientY};
-    }, {passive:true});
-    canvasEl.addEventListener('touchend', e=>{
-        if(!trendlineMode || !_tlPointerDown) return;
-        const t=e.changedTouches[0]; if(!t) return;
-        const dx=t.clientX-_tlPointerDown.x, dy=t.clientY-_tlPointerDown.y;
-        _tlPointerDown=null;
-        if(Math.sqrt(dx*dx+dy*dy) > 8) return;
-        handleTrendlinePoint(t.clientX, t.clientY, canvasEl);
-    });
-})();
 
 /* ════════════════════════════════════════════
    CHART WS
@@ -1633,6 +1515,14 @@ let _tickWatchdog = null;
 let publicPollTimer = null;
 const PUBLIC_POLL_MS = 3000;
 
+/* ════ REPLI PAR POLLING (non connecté à un compte Deriv) ════
+   Sur le canal public anonyme (app_id=1089), l'abonnement "ticks" pour les
+   Step Index renvoie une erreur InvalidSymbol — c'est une limitation
+   connue de Deriv sur ce canal pour ces symboles précis (l'historique
+   ticks_history fonctionne, mais pas le flux live). Tant que l'utilisateur
+   n'est pas connecté à son compte (voir subscribeTradingTicks, qui utilise
+   le canal AUTHENTIFIÉ où le live fonctionne), on republie régulièrement
+   la requête d'historique pour rafraîchir le graphique. */
 function startPublicPolling(){
     stopPublicPolling();
     publicPollTimer = setInterval(()=>{
@@ -1649,12 +1539,18 @@ function stopPublicPolling(){
 function connectChartWS(){
     if(wsChart){wsChart.onclose=null;wsChart.close();}
     sessionHigh=null;sessionLow=null;
-    _lastTickReceivedAt = Date.now();
+    _lastTickReceivedAt = Date.now(); // évite un reconnect immédiat par le watchdog
     wsChart=new WebSocket(CHART_WS_URL);
     wsChart.onopen=()=>{
         setChartStatus(true);
         console.log('[Deriv WS] connexion ouverte — symbole:', currentSymbol);
+        /* Historique (one-shot, sans abonnement). ⚠️ On ne demande PLUS
+           l'abonnement "ticks" live ici : il est systématiquement rejeté
+           ("InvalidSymbol") pour les Step Index sur ce canal public. Le
+           flux live passe désormais par subscribeTradingTicks() (canal
+           authentifié) si connecté, ou par startPublicPolling() sinon. */
         wsChart.send(JSON.stringify({ticks_history:currentSymbol,adjust_start_time:1,count:3000,end:'latest',start:1}));
+        /* Heure serveur : requête initiale puis toutes les secondes */
         wsChart.send(JSON.stringify({time:1}));
         if(wsChart._timeTimer) clearInterval(wsChart._timeTimer);
         wsChart._timeTimer = setInterval(()=>{
@@ -1687,6 +1583,14 @@ function connectChartWS(){
     wsChart.onerror=(ev)=>{ console.error('[Deriv WS] erreur socket:', ev); try{wsChart.close();}catch(e){} };
 }
 
+/* ════ WATCHDOG ANTI-GEL ════
+   Certaines WebSocket restent "ouvertes" (readyState OPEN) côté navigateur
+   mais arrêtent silencieusement de recevoir des données (connexion "zombie",
+   proxy/CDN qui coupe le flux, veille de l'onglet, etc). Sans cette
+   vérification, le graphique reste figé indéfiniment sans qu'aucune erreur
+   ne soit levée. On force une reconnexion propre si aucun tick/historique
+   n'est arrivé depuis 20 secondes (laisse une marge au polling 3s + à
+   l'espacement naturel des ticks Step Index). */
 if(_tickWatchdog) clearInterval(_tickWatchdog);
 _tickWatchdog = setInterval(()=>{
     if(!wsChart) return;
@@ -1718,6 +1622,7 @@ function _renderServerTime(){
     if(dateEl) dateEl.innerText =
         ts.getUTCFullYear()+'/'+pad(ts.getUTCMonth()+1)+'/'+pad(ts.getUTCDate());
 }
+/* Interpolation locale entre les ticks serveur (affichage fluide) */
 setInterval(()=>{ if(_serverEpoch>0) _renderServerTime(); }, 500);
 
 /* ════════════════════════════════════════════
@@ -1784,6 +1689,13 @@ function updateChartData(forceEnd=false){
     const maPeriod=parseInt(document.getElementById('ma-period').value)||20;
     const maType=document.getElementById('ma-type').value||'sma';
 
+    /* ⚠️ FIX PERFORMANCE : ne calculer SAR / Fractals / SuperTrend que sur
+       une fenêtre récente (INDICATOR_WINDOW points) plutôt que sur tout
+       l'historique (jusqu'à 6000 points), recalculé intégralement à
+       CHAQUE tick. Ce recalcul complet bloquait le thread JS assez
+       longtemps pour que plusieurs ticks WebSocket s'accumulent avant le
+       prochain rendu — c'est la cause principale des "sauts" de 2-4 ticks
+       au lieu d'un affichage fluide tick par tick. */
     const n = ticksData.prices.length;
     const winStart = Math.max(0, n - INDICATOR_WINDOW);
     const wPrices = ticksData.prices.slice(winStart);
@@ -1796,6 +1708,10 @@ function updateChartData(forceEnd=false){
     const fractals = { up: padNull(fractalsW.up), down: padNull(fractalsW.down) };
     lastFractalPeaks=extractPeaks(ticksData.prices,fractals,fracPer);
 
+    /* Le SuperTrend n'est plus recalculé ici : il avance de façon
+       incrémentale (voir stStepNewTick / rebuildSTFromHistory) et les
+       tableaux stBullArr/stBearArr sont déjà alignés 1:1 sur
+       ticksData.prices — on les utilise tels quels. */
     const stResult = { bull: stBullArr, bear: stBearArr };
     const maValsW = maType==='ema' ? calculateEMA(wPrices,maPeriod) : calculateSMA(wPrices,maPeriod);
     const maVals = padNull(maValsW);
@@ -1812,7 +1728,6 @@ function updateChartData(forceEnd=false){
     if(forceEnd)scrollToEnd();
     if(showLevels)updatePriceLines();
     if(showFractal)drawPeakLabels();
-    renderTrendlines();
 }
 
 /* ════════════════════════════════════════════
@@ -1997,21 +1912,24 @@ function resetZoom(){
     chart.resetZoom();scrollToEnd(true);
 }
 function scrollToEnd(force){
+    /* Respecte le toggle Auto-scroll, sauf action manuelle explicite
+       (ex: clic sur "Reset", ou réactivation du toggle) qui passe force=true. */
     if(!autoScrollEnabled && !force) return;
     if(!chart||!ticksData.times.length)return;
     const total=ticksData.times.length;
     chart.zoomScale('x',{min:Math.max(0,total-VIEW_WINDOW),max:total+RIGHT_PAD-1},'default');
-    setTimeout(()=>{updatePriceLines();drawPeakLabels();renderTrendlines();},60);
+    setTimeout(()=>{updatePriceLines();drawPeakLabels();},60);
 }
 function toggleAutoScroll(){
     autoScrollEnabled = !autoScrollEnabled;
     document.getElementById('btn-autoscroll').classList.toggle('active', autoScrollEnabled);
     try{ localStorage.setItem('autoscroll_enabled', autoScrollEnabled ? '1' : '0'); }catch(e){}
+    /* En réactivant, on revient immédiatement sur le tick le plus récent */
     if(autoScrollEnabled) scrollToEnd(true);
 }
 function onParamsChanged(){updateChartData(false);if(chartMode==='renko')updateRenkoChart();}
 let lTimer=null;
-function debounceLines(){clearTimeout(lTimer);lTimer=setTimeout(()=>{updatePriceLines();drawPeakLabels();renderTrendlines();},50);}
+function debounceLines(){clearTimeout(lTimer);lTimer=setTimeout(()=>{updatePriceLines();drawPeakLabels();},50);}
 window.addEventListener('wheel',debounceLines,{passive:true});
 
 /* ════════════════════════════════════════════
@@ -2092,7 +2010,9 @@ function placeDoubleTrade(){
     const typeUp=isAllowEqual?'CALLE':'CALL';
     const typeDn=isAllowEqual?'PUTE':'PUT';
     const base={amount:stake,basis:'stake',currency:'USD',duration:durVal,duration_unit:durType,underlying_symbol:tradeSymbol()};
+    /* Proposal CALL */
     wsTrading.send(JSON.stringify({proposal:1,...base,contract_type:typeUp,req_id:10}));
+    /* Proposal PUT avec délai */
     setTimeout(()=>{
         if(wsTrading&&wsTrading.readyState===WebSocket.OPEN)
             wsTrading.send(JSON.stringify({proposal:1,...base,contract_type:typeDn,req_id:11}));
@@ -2104,12 +2024,17 @@ function placeDoubleTrade(){
 
 /* ════════════════════════════════════════════
    AUTO-TRADE MARKOV — COOLDOWN INTELLIGENT
+   — Après chaque trade déclenché, un cooldown
+     s'active (ticks ou secondes personnalisés)
+   — Pendant le cooldown : toutes les opportunités
+     sont ignorées silencieusement (pas de file)
+   — Le compteur visible s'affiche en temps réel
 ════════════════════════════════════════════ */
 let autoTradeOn       = false;
 let autoTradeCooldown = false;
-let _autoCooldownTimer  = null;
-let _autoCooldownTicks  = 0;
-let _autoCooldownTotal  = 0;
+let _autoCooldownTimer  = null;   // setTimeout pour cooldown secondes
+let _autoCooldownTicks  = 0;      // compteur ticks restants
+let _autoCooldownTotal  = 0;      // valeur initiale pour affichage
 
 function toggleAutoTrade(){
     if(!tradeAuthorized){
@@ -2150,6 +2075,7 @@ function _startAutoCooldown(){
     _autoCooldownTotal = val;
 
     if(unit==='s'){
+        /* Cooldown en secondes — timer réel */
         let remaining = val;
         if(counter){ counter.style.display='inline'; counter.innerText='⏳ '+remaining+'s'; }
         const tick = ()=>{
@@ -2163,6 +2089,7 @@ function _startAutoCooldown(){
         };
         _autoCooldownTimer = setTimeout(tick, 1000);
     } else {
+        /* Cooldown en ticks — décompté dans autoTradeCheck */
         _autoCooldownTicks = val;
         if(counter){ counter.style.display='inline'; counter.innerText='⏳ '+val+'tk'; }
     }
@@ -2171,6 +2098,7 @@ function _startAutoCooldown(){
 function autoTradeCheck(pUp, pDn){
     if(!autoTradeOn) return;
 
+    /* Gestion cooldown ticks : décompter silencieusement */
     if(autoTradeCooldown){
         const unit = document.getElementById('auto-cooldown-unit').value;
         if(unit==='t' && _autoCooldownTicks>0){
@@ -2179,7 +2107,7 @@ function autoTradeCheck(pUp, pDn){
             if(counter) counter.innerText = _autoCooldownTicks>0 ? '⏳ '+_autoCooldownTicks+'tk' : '';
             if(_autoCooldownTicks<=0) _clearAutoCooldown();
         }
-        return;
+        return; /* Ignorer silencieusement */
     }
 
     if(!tradeAuthorized || !wsTrading || wsTrading.readyState!==WebSocket.OPEN) return;
@@ -2187,6 +2115,10 @@ function autoTradeCheck(pUp, pDn){
     const threshold = parseFloat(document.getElementById('auto-threshold').value)/100;
     const direction = document.getElementById('auto-direction').value;
 
+    /*
+     * Déclenche quand le % est ÉGAL OU EN-DESSOUS du seuil personnalisé
+     * Ex: seuil=55%, P(▲)=46.2% → 46.2 ≤ 55 → Rise ✓
+     */
     let dir = null;
     if(direction==='up'   && pUp<=threshold) dir='up';
     if(direction==='dn'   && pDn<=threshold) dir='dn';
@@ -2198,8 +2130,10 @@ function autoTradeCheck(pUp, pDn){
     }
     if(!dir) return;
 
+    /* Démarrer le cooldown intelligent */
     _startAutoCooldown();
 
+    /* Flash visuel */
     const btn=document.getElementById('btn-auto');
     btn.style.background='var(--orange)'; btn.style.color='#000';
     setTimeout(()=>{ btn.style.background='rgba(255,170,64,.25)'; btn.style.color='var(--orange)'; },400);
@@ -2231,3 +2165,506 @@ function showFeedback(msg,cls){
 function formatTime(epoch){
     return new Date(epoch*1000).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
 }
+
+/* ════════════════════════════════════════════
+   SUPERTREND
+════════════════════════════════════════════ */
+function calculateSuperTrend(prices,_h,_l,period,mult){
+    const n=prices.length;
+    const bull=new Array(n).fill(null),bear=new Array(n).fill(null),trend=new Array(n).fill(0);
+    const p=Math.min(period,Math.floor(n/2)-1);
+    if(p<2||n<p+2)return{bull,bear,trend};
+
+    /* ⚠️ FIX "Période" inactif : un Step Index bouge d'un pas de taille
+       FIXE à chaque tick (+0.1 ou -0.1). L'ancienne mesure de volatilité
+       (moyenne lissée de l'écart tick-à-tick) est donc quasi constante
+       quelle que soit la fenêtre de lissage choisie — lisser sur 5 ticks
+       ou sur 100 ticks donnait presque le même résultat, d'où "Période"
+       qui semblait sans effet alors que "Mult" agissait normalement.
+       On mesure maintenant la volatilité comme l'écart-type glissant du
+       PRIX sur la fenêtre "Période" : cette mesure dépend réellement de
+       la taille de la fenêtre (plus la période est grande, plus elle
+       capture d'amplitude de mouvement), rendant le paramètre pleinement
+       fonctionnel. Calcul en O(n) via sommes glissantes. */
+    const atr=new Array(n).fill(0);
+    let sum=0, sumSq=0;
+    for(let i=0;i<n;i++){
+        sum+=prices[i]; sumSq+=prices[i]*prices[i];
+        if(i>=p){ sum-=prices[i-p]; sumSq-=prices[i-p]*prices[i-p]; }
+        const cnt=Math.min(i+1,p);
+        if(cnt>=2){
+            const mean=sum/cnt;
+            const variance=Math.max(0, sumSq/cnt - mean*mean);
+            atr[i]=Math.sqrt(variance) || 0.0001;
+        } else {
+            atr[i]=0.0001;
+        }
+    }
+
+    const upper=new Array(n).fill(0),lower=new Array(n).fill(0);
+    for(let i=p;i<n;i++){
+        const src=(prices[i]+prices[i-1])/2;
+        const band=mult*atr[i];
+        const bUp=src+band,bDn=src-band;
+        if(i===p){upper[i]=bUp;lower[i]=bDn;trend[i]=prices[i]>bUp?1:-1;}
+        else{
+            upper[i]=(bUp<upper[i-1]||prices[i-1]>upper[i-1])?bUp:upper[i-1];
+            lower[i]=(bDn>lower[i-1]||prices[i-1]<lower[i-1])?bDn:lower[i-1];
+            if(trend[i-1]===-1)trend[i]=prices[i]>upper[i]?1:-1;
+            else trend[i]=prices[i]<lower[i]?-1:1;
+        }
+        if(trend[i]===1){bull[i]=lower[i];bear[i]=null;}
+        else{bear[i]=upper[i];bull[i]=null;}
+    }
+    return{bull,bear,trend};
+}
+function updateStreak(prices,stResult){
+    const pill=document.getElementById('streak-pill');
+    if(!prices||prices.length<3){pill.innerText='—';return;}
+    const n=prices.length;
+    let streak=1;
+    const lastDir=prices[n-1]>=prices[n-2]?1:-1;
+    for(let i=n-2;i>0;i--){
+        const dir=prices[i]>=prices[i-1]?1:-1;
+        if(dir===lastDir)streak++;else break;
+    }
+    const arrow=lastDir===1?'▲':'▼';
+    const cls=lastDir===1?'bull':'bear';
+    pill.className='streak-pill '+cls;
+    pill.innerText=streak>=5?arrow+' '+streak+'  ⚠ retour?':arrow+' '+streak;
+}
+
+/* ════════════════════════════════════════════
+   CHAÎNE DE MARKOV (calcul interne — n'affiche plus de tableau ;
+   utilisé uniquement pour alimenter l'Auto-Trade Markov de la trade-bar)
+════════════════════════════════════════════ */
+const mkTransitions = {};
+let   mkHistory     = [];
+const mkOrder       = 3;
+const mkMinObs      = 30;
+
+function addMarkovTick(direction){
+    mkHistory.push(direction);
+    if(mkHistory.length > 10000){
+        mkHistory.shift();
+    }
+    if(mkHistory.length > mkOrder){
+        const state = mkHistory.slice(-mkOrder-1,-1).join('');
+        if(!mkTransitions[state]) mkTransitions[state] = {U:0,D:0};
+        mkTransitions[state][direction]++;
+    }
+    evaluateMarkovSignal();
+}
+const mkPrices = [];
+function addMarkovPrice(price){
+    mkPrices.push(price);
+    if(mkPrices.length > 10000) mkPrices.shift();
+}
+function evaluateMarkovSignal(){
+    if(mkHistory.length < mkOrder + 2) return;
+    const state = mkHistory.slice(-mkOrder).join('');
+    const t = mkTransitions[state];
+    const obs = t ? (t.U + t.D) : 0;
+    if(!t || obs < mkMinObs) return;
+    const pUp = t.U / obs;
+    const pDn = t.D / obs;
+    if(typeof autoTradeCheck==='function') autoTradeCheck(pUp, pDn);
+}
+
+/* ════════════════════════════════════════════
+   TIE PREDICTOR
+════════════════════════════════════════════ */
+const tpTable = {};
+const TP_CTX = 4;
+const TP_MIN_OBS = 20;
+/* ⚠️ FIX PERFORMANCE : tpUpdate() reconstruisait TOUTE la table à chaque
+   tick en reparcourant tout l'historique (des milliers de points) — ce
+   calcul bloquait le thread JS assez longtemps pour que plusieurs ticks
+   WebSocket s'accumulent avant le prochain rendu, d'où l'effet "le prix
+   saute de 2-3-4 ticks" au lieu d'être fluide. On rend maintenant le calcul
+   incrémental : à chaque tick, on ne traite QUE le nouveau point devenu
+   éligible (O(1) au lieu de O(n)), et on garde des totaux cumulés au lieu
+   de les re-sommer sur toute la table à chaque fois. */
+let tpNextT = TP_CTX;
+let tpTotalObs = 0, tpTotalTies1 = 0;
+
+function tpGetPattern(endIdx) {
+    if (endIdx < TP_CTX) return null;
+    let pat = '';
+    for (let i = endIdx - TP_CTX; i < endIdx; i++)
+        pat += (mkPrices[i+1] >= mkPrices[i]) ? 'U' : 'D';
+    return pat;
+}
+function tpResetState(){
+    Object.keys(tpTable).forEach(k => delete tpTable[k]);
+    tpNextT = TP_CTX;
+    tpTotalObs = 0; tpTotalTies1 = 0;
+}
+function tpProcessNewData(){
+    const prices = mkPrices;
+    const n = prices.length;
+    const limit = n - 4;
+    /* Traite tous les index devenus éligibles depuis le dernier appel
+       (normalement un seul par tick — la boucle sert de rattrapage). */
+    while (tpNextT < limit) {
+        const t = tpNextT;
+        const pat = tpGetPattern(t);
+        if (pat) {
+            if (!tpTable[pat]) tpTable[pat] = {t1:0,t2:0,t3:0,t4:0,total:0};
+            const entry = tpTable[pat];
+            entry.total++; tpTotalObs++;
+            const ref = prices[t];
+            if (Math.abs(prices[t+1] - ref) < 0.05) { entry.t1++; tpTotalTies1++; }
+            if (Math.abs(prices[t+2] - ref) < 0.05) entry.t2++;
+            if (Math.abs(prices[t+3] - ref) < 0.05) entry.t3++;
+            if (Math.abs(prices[t+4] - ref) < 0.05) entry.t4++;
+        }
+        tpNextT++;
+    }
+}
+function tpUpdate() {
+    const prices = mkPrices;
+    const n = prices.length;
+    if (n < TP_CTX + 5) { updateTieDisplay(null, null); return; }
+    tpProcessNewData();
+    const curPat = tpGetPattern(n - 1);
+    updateTieDisplay(curPat, tpTotalObs, tpTotalTies1);
+}
+function updateTieDisplay(curPat, totalObs, totalTies1) {
+    document.getElementById('tp-total').innerText  = totalObs > 0 ? totalTies1 + ' / ' + totalObs : '0';
+    document.getElementById('tp-rate').innerText   = totalObs > 0 ? (totalTies1/totalObs*100).toFixed(1)+'%' : '—';
+    const entries = Object.entries(tpTable)
+        .filter(([,v]) => v.total >= TP_MIN_OBS)
+        .sort((a,b) => (b[1].t1/b[1].total) - (a[1].t1/a[1].total));
+    if (entries.length > 0) {
+        const [bestPat, bv] = entries[0];
+        document.getElementById('tp-best-pattern').innerText =
+            patToArrows(bestPat) + '  →  ' + (bv.t1/bv.total*100).toFixed(1) + '% tie  (' + bv.total + ' obs)';
+    } else {
+        document.getElementById('tp-best-pattern').innerText = '— collecte…';
+    }
+    document.getElementById('tp-context').innerText = curPat ? patToArrows(curPat) : '—';
+    if (!curPat || !tpTable[curPat] || tpTable[curPat].total < TP_MIN_OBS) {
+        const obs = tpTable[curPat] ? tpTable[curPat].total : 0;
+        for (let k = 1; k <= 4; k++) {
+            const pTheo = k % 2 === 0 ? computePTie(k) : 0;
+            setTieBox(k, pTheo, obs);
+        }
+        const sig = document.getElementById('tp-signal');
+        sig.className = 'tie-signal neut';
+        sig.innerText = obs > 0 ? '⏳ ' + obs + '/' + TP_MIN_OBS + ' obs pour ce pattern' : '⏳ Pattern inconnu — théorique';
+        return;
+    }
+    const e = tpTable[curPat];
+    const probs = [e.t1/e.total, e.t2/e.total, e.t3/e.total, e.t4/e.total];
+    for (let k = 1; k <= 4; k++) setTieBox(k, probs[k-1], e.total);
+    const maxP = Math.max(...probs);
+    const maxK = probs.indexOf(maxP) + 1;
+    const sig  = document.getElementById('tp-signal');
+    if (maxP >= 0.35)      { sig.className='tie-signal danger';  sig.innerText='⚠ Tie prob. élevée à +'+maxK+' ('+(maxP*100).toFixed(1)+'%)'; }
+    else if (maxP >= 0.20) { sig.className='tie-signal caution'; sig.innerText='⚡ Attention tie à +'+maxK+' ('+(maxP*100).toFixed(1)+'%)'; }
+    else                   { sig.className='tie-signal safe';    sig.innerText='✓ Tie peu probable ('+(maxP*100).toFixed(1)+'% max)'; }
+}
+function setTieBox(k, p, obs) {
+    const pct  = (p * 100).toFixed(1);
+    const pctN = parseFloat(pct);
+    document.getElementById('tp-pct-' + k).innerText = pctN > 0 ? pct + '%' : '—';
+    const bar = document.getElementById('tp-bar-' + k);
+    bar.style.width      = Math.min(pctN * 2.5, 100) + '%';
+    bar.style.background = pctN >= 35 ? 'var(--red)' : pctN >= 20 ? 'var(--orange)' : 'var(--green)';
+    const box = document.getElementById('tp-box-' + k);
+    box.className = 'tie-tick-box' + (pctN >= 35 ? ' hot' : pctN >= 20 ? ' caution' : '');
+}
+function patToArrows(pat) {
+    return pat.split('').map(c => c === 'U' ? '▲' : '▼').join('');
+}
+function computePTie(n){
+    if(n%2!==0)return 0;
+    let num=1,den=1; const half=n/2;
+    for(let i=0;i<half;i++){num*=(n-i);den*=(i+1);}
+    return(num/den)/Math.pow(2,n);
+}
+
+/* ════════════════════════════════════════════
+   SIMULATEUR PAYOUT — Durée "Heure de fin"
+   ─────────────────────────────────────────
+   Sur Deriv, en mode "Heure de fin" (par opposition à une durée fixe en
+   ticks/secondes), le nombre de ticks restants avant l'expiration du
+   contrat diminue de 1 à CHAQUE tick qui passe. Or :
+     - reste IMPAIR de ticks → tie impossible → payout STANDARD
+     - reste PAIR de ticks   → tie possible   → payout COMPENSATION (élevé)
+   Comme ce compte restant diminue de 1 à chaque tick, sa parité s'inverse
+   nécessairement à CHAQUE tick — indépendamment du sens du prix (hausse
+   ou baisse). C'est une simulation pure de ce mécanisme d'alternance,
+   sans calcul ni affichage du payout réel — juste l'indicateur visuel.
+════════════════════════════════════════════ */
+let psParity = 0; // 0 = pair (compensation), 1 = impair (standard) — phase arbitraire
+let psHistory = []; // {dir:'U'|'D', mode:'comp'|'std'}
+const PS_MAX_CHIPS = 40;
+
+function addPayoutSimTick(direction){
+    const mode = (psParity % 2 === 0) ? 'comp' : 'std';
+    psParity++;
+    psHistory.push({dir:direction, mode});
+    if(psHistory.length > PS_MAX_CHIPS) psHistory.shift();
+    renderPayoutSim();
+}
+function renderPayoutSim(){
+    const seqEl = document.getElementById('ps-sequence');
+    const curEl = document.getElementById('ps-current');
+    if(!seqEl || !curEl) return;
+    seqEl.innerHTML = psHistory.map(h=>{
+        const arrow = h.dir==='U' ? '▲' : '▼';
+        return '<div class="ps-chip '+h.mode+'"><span class="ps-arrow">'+arrow+'</span><span>'+(h.mode==='comp'?'🟢':'🔴')+'</span></div>';
+    }).join('');
+    seqEl.scrollLeft = seqEl.scrollWidth;
+    if(psHistory.length){
+        const last = psHistory[psHistory.length-1];
+        curEl.className = 'ps-current ' + last.mode;
+        curEl.innerText = last.mode==='comp' ? '🟢 COMPENSATION (tie)' : '🔴 STANDARD';
+    } else {
+        curEl.className = 'ps-current std';
+        curEl.innerText = '🔴 STANDARD';
+    }
+}
+function resetPayoutSim(){
+    psParity = 0; psHistory = [];
+    renderPayoutSim();
+}
+function togglePayoutSimHistory(){
+    const seq = document.getElementById('ps-sequence');
+    const btn = document.getElementById('btn-ps-history-toggle');
+    const nowVisible = seq.style.display !== 'none';
+    seq.style.display = nowVisible ? 'none' : '';
+    btn.classList.toggle('active', !nowVisible);
+    try{ localStorage.setItem('ps_history_visible', nowVisible ? '0' : '1'); }catch(e){}
+}
+
+/* ════════════════════════════════════════════
+   COMPTEUR DE CASSURES SUPERTREND
+   ─────────────────────────────────────────
+   À chaque tick, on regarde la direction actuelle du SuperTrend (haussier
+   ▲ / baissier ▼). Tant qu'elle ne change pas, un compteur s'incrémente
+   en temps réel (le nombre de ticks depuis la dernière cassure de bande).
+   Dès que la direction bascule, le segment précédent est archivé dans
+   l'historique (coloré vert/rouge comme le Simulateur Payout) et le
+   compteur repart de zéro pour la nouvelle direction. On garde les 10
+   dernières cassures.
+════════════════════════════════════════════ */
+let stTrackDir = 0;      // 0 = pas encore initialisé, 1 = haussier, -1 = baissier
+let stTrackCount = 0;    // ticks écoulés depuis la dernière cassure
+let stBreakHistory = []; // {dir, count} des cassures passées, plus ancienne en premier
+const ST_BREAK_HISTORY_MAX = 10;
+
+function trackSTBreak(currentDir){
+    if(currentDir !== 1 && currentDir !== -1) return;
+    if(stTrackDir === 0){
+        stTrackDir = currentDir;
+        stTrackCount = 1;
+        renderSTBreakCounter();
+        return;
+    }
+    if(currentDir === stTrackDir){
+        stTrackCount++;
+    } else {
+        stBreakHistory.push({dir: stTrackDir, count: stTrackCount});
+        if(stBreakHistory.length > ST_BREAK_HISTORY_MAX) stBreakHistory.shift();
+        stTrackDir = currentDir;
+        stTrackCount = 1;
+    }
+    renderSTBreakCounter();
+}
+function renderSTBreakCounter(){
+    const liveEl = document.getElementById('st-break-live');
+    const histEl = document.getElementById('st-break-history');
+    if(!liveEl || !histEl) return;
+    if(stTrackDir === 0){
+        liveEl.className = 'ps-current std';
+        liveEl.innerText = '— en attente';
+    } else {
+        liveEl.className = 'ps-current ' + (stTrackDir===1 ? 'comp' : 'std');
+        liveEl.innerText = (stTrackDir===1 ? '▲ ' : '▼ ') + stTrackCount + ' ticks';
+    }
+    /* Ordre décroissant : la cassure la plus récente en premier (à
+       gauche), donc toujours visible sans avoir à défiler. */
+    histEl.innerHTML = [...stBreakHistory].reverse().map(h=>{
+        const cls = h.dir===1 ? 'comp' : 'std';
+        const arrow = h.dir===1 ? '▲' : '▼';
+        return '<div class="stb-chip '+cls+'">'+arrow+h.count+'</div>';
+    }).join('');
+    histEl.scrollLeft = 0;
+}
+function resetSTBreakCounter(){
+    stTrackDir = 0; stTrackCount = 0; stBreakHistory = [];
+    renderSTBreakCounter();
+}
+function toggleSTBreakHistory(){
+    const hist = document.getElementById('st-break-history');
+    const btn = document.getElementById('btn-st-break-history-toggle');
+    const nowVisible = hist.style.display !== 'none';
+    hist.style.display = nowVisible ? 'none' : '';
+    btn.classList.toggle('active', !nowVisible);
+    try{ localStorage.setItem('st_break_history_visible', nowVisible ? '0' : '1'); }catch(e){}
+}
+
+document.getElementById('stake-input').addEventListener('input', updateDoubleLabel);
+document.getElementById('stake-input').addEventListener('change', updateDoubleLabel);
+
+document.getElementById('market-select').addEventListener('change',e=>{
+    currentSymbol=e.target.value;
+    ticksData={times:[],prices:[],highs:[],lows:[]};
+    sessionHigh=null; sessionLow=null;
+    ['stat-high','stat-low'].forEach(id=>document.getElementById(id).innerText='—');
+    document.getElementById('last-price').innerText='—';
+    if(chart){chart.data.labels=[];chart.data.datasets.forEach(d=>d.data=[]);chart.update('none');}
+    clearPeakLabels();
+    mkHistory.length=0; mkPrices.length=0;
+    Object.keys(mkTransitions).forEach(k=>delete mkTransitions[k]);
+    tpResetState();
+    resetPayoutSim();
+    resetRenkoState();
+    resetSTIncremental();
+    resetSTBreakCounter();
+    connectChartWS();
+    if(tradeAuthorized) subscribeTradingTicks();
+});
+
+/* ════════════════════════════════════════════
+   VISIBILITÉ DES PANNEAUX — pour aérer l'interface
+   quand trop de bandeaux sont affichés en même temps.
+   L'état choisi est mémorisé (localStorage) et réappliqué
+   au rechargement de la page.
+════════════════════════════════════════════ */
+const PANEL_IDS = ['trade-bar','stats-bar','tie-bar','payout-sim-bar','st-break-bar'];
+function togglePanelVisibility(panelId, btnEl){
+    const el = document.getElementById(panelId);
+    if(!el) return;
+    const nowHidden = el.style.display !== 'none';
+    el.style.display = nowHidden ? 'none' : '';
+    if(btnEl) btnEl.classList.toggle('active', !nowHidden);
+    savePanelVisibility();
+}
+function setAllPanels(visible){
+    PANEL_IDS.forEach(id=>{
+        const el = document.getElementById(id);
+        const btn = document.querySelector('#panel-toggles button[data-panel="'+id+'"]');
+        if(el) el.style.display = visible ? '' : 'none';
+        if(btn) btn.classList.toggle('active', visible);
+    });
+    savePanelVisibility();
+}
+function savePanelVisibility(){
+    const state = {};
+    PANEL_IDS.forEach(id=>{
+        const el = document.getElementById(id);
+        if(el) state[id] = el.style.display !== 'none';
+    });
+    try{ localStorage.setItem('panel_visibility', JSON.stringify(state)); }catch(e){}
+}
+function loadPanelVisibility(){
+    let state = {};
+    try{ state = JSON.parse(localStorage.getItem('panel_visibility')||'{}'); }catch(e){}
+    PANEL_IDS.forEach(id=>{
+        const el = document.getElementById(id);
+        const btn = document.querySelector('#panel-toggles button[data-panel="'+id+'"]');
+        if(!el) return;
+        const visible = state.hasOwnProperty(id) ? state[id] : true;
+        el.style.display = visible ? '' : 'none';
+        if(btn) btn.classList.toggle('active', visible);
+    });
+}
+
+window.onload = async () => {
+    initChart();
+    /* Restaurer les paramètres d'indicateurs sauvegardés AVANT de charger
+       l'historique/le graphique, pour que le premier rendu utilise déjà
+       les bonnes valeurs (SAR, Fractal, ST, MA, Renko). */
+    loadIndicatorParams();
+    fetchActiveStepSymbolsAndInit();
+    updateDoubleLabel();
+    loadPanelVisibility();
+    try{
+        const savedParams = localStorage.getItem('param_panel_visible');
+        if(savedParams === '0'){
+            document.getElementById('param-panel').style.display = 'none';
+            document.getElementById('btn-params-toggle').classList.remove('active');
+        }
+    }catch(e){}
+    try{
+        const savedPsHist = localStorage.getItem('ps_history_visible');
+        if(savedPsHist === '0'){
+            document.getElementById('ps-sequence').style.display = 'none';
+            document.getElementById('btn-ps-history-toggle').classList.remove('active');
+        }
+    }catch(e){}
+    try{
+        const savedStbHist = localStorage.getItem('st_break_history_visible');
+        if(savedStbHist === '0'){
+            document.getElementById('st-break-history').style.display = 'none';
+            document.getElementById('btn-st-break-history-toggle').classList.remove('active');
+        }
+    }catch(e){}
+    try{
+        const saved = localStorage.getItem('autoscroll_enabled');
+        if(saved !== null){
+            autoScrollEnabled = saved === '1';
+            document.getElementById('btn-autoscroll').classList.toggle('active', autoScrollEnabled);
+        }
+    }catch(e){}
+
+    /* ── Restaurer stats ── */
+    try{
+        const s=JSON.parse(localStorage.getItem('deriv_stats')||'{}');
+        if(s.total!=null){statsTotal=s.total;statsWin=s.win;statsLoss=s.loss;statsPnl=s.pnl;updateStatsDisplay();}
+    }catch(e){}
+
+    /* ── Lire le callback OAuth (code dans l'URL) ── */
+    const urlParams=new URLSearchParams(window.location.search);
+    const code=urlParams.get('code');
+    const state=urlParams.get('state');
+
+    if(code&&state){
+        const savedState=sessionStorage.getItem('oauth_state');
+        if(state!==savedState){
+            setTokStatus('❌ State OAuth invalide (CSRF?)','var(--red)');
+        } else {
+            try{
+                setTokStatus('⏳ Échange du code OAuth…','var(--accent)');
+                setBtnConnect('connecting','⏳ Connexion…');
+                accessToken=await exchangeCode(code);
+                localStorage.setItem('access_token',accessToken);
+                localStorage.setItem('is_logged','true');
+                sessionStorage.removeItem('oauth_state');
+                sessionStorage.removeItem('oauth_verifier');
+                window.history.replaceState({},document.title,REDIRECT_URI);
+                await connectDeriv();
+            }catch(e){
+                setTokStatus('❌ '+e.message,'var(--red)');
+                setBtnConnect('','🔐 Connexion Deriv');
+                showFeedback('❌ '+e.message,'err');
+                window.history.replaceState({},document.title,REDIRECT_URI);
+            }
+        }
+    } else if(localStorage.getItem('is_logged')==='true'){
+        /* Restaurer session sauvegardée */
+        accessToken=localStorage.getItem('access_token');
+        if(accessToken){
+            setTokStatus('⏳ Restauration session…','var(--accent)');
+            setBtnConnect('connecting','⏳ Connexion…');
+            try{ await connectDeriv(); }
+            catch(e){
+                /* Token expiré → nettoyer silencieusement */
+                localStorage.removeItem('access_token'); localStorage.removeItem('is_logged');
+                setBtnConnect('','🔐 Connexion Deriv');
+                setTokStatus('Session expirée — reconnectez-vous','var(--muted)');
+            }
+        }
+    }
+
+    setInterval(()=>{
+        if(ticksData.prices.length){if(showLevels)updatePriceLines();if(showFractal)drawPeakLabels();}
+    },400);
+};
+</script>
+</body>
+</html>
