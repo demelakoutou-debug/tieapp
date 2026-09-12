@@ -640,7 +640,7 @@
             <button class="tl-btn" id="btn-trendline" title="Tracer une trendline (cliquer-glisser sur le graphique)" onclick="toggleTrendlineMode()">📏</button>
             <button class="tl-btn" id="btn-trendline-clear" title="Effacer toutes les trendlines" onclick="clearTrendlines()">🗑</button>
         </div>
-        <div class="tl-hint" id="tl-hint">Glisse les points ronds pour étirer<br>Glisse la ligne pour la déplacer</div>
+        <div class="tl-hint" id="tl-hint">Clique-glisse sur une zone vide pour tracer<br>Glisse les points ronds pour étirer<br>Glisse la ligne pour la déplacer</div>
         <svg id="trendline-layer"></svg>
 
         <div class="hint" id="chart-hint">
@@ -1243,13 +1243,13 @@ function initChart(){
 }
 
 /* ════════════════════════════════════════════
-   TRENDLINE — style Deriv : apparition auto,
-   poignées glissables, déplacement de la ligne
+   TRENDLINE — style Deriv : dessin libre par
+   clic-glisser, poignées glissables, déplacement
 ════════════════════════════════════════════ */
-let trendlines = [];          // [{id,x1,y1,x2,y2}] en coords DATA (idx, prix)
+let trendlines = [];
 let trendlineMode = false;
 let tlNextId = 1;
-let tlDragState = null;       // {id, mode:'p1'|'p2'|'move', origX1,origY1,origX2,origY2, startData}
+let tlDragState = null;
 let tlWasPanEnabled = true;
 
 function tlSvgEl(){ return document.getElementById('trendline-layer'); }
@@ -1285,19 +1285,6 @@ function tlDataToLocalPx(idx, price){
     return { x: cx / cvW * w, y: cy / cvH * h };
 }
 
-/* Crée une trendline diagonale par défaut, calée sur la zone visible
-   actuelle du graphique (comme quand tu cliques l'outil sur Deriv). */
-function tlCreateDefaultLine(){
-    if(!chart) return null;
-    const xs = chart.scales.x, ys = chart.scales.y;
-    if(!xs || !ys) return null;
-    const x1 = xs.min + (xs.max - xs.min) * 0.20;
-    const x2 = xs.min + (xs.max - xs.min) * 0.65;
-    const y1 = ys.min + (ys.max - ys.min) * 0.30;
-    const y2 = ys.min + (ys.max - ys.min) * 0.70;
-    return { id: tlNextId++, x1, y1, x2, y2 };
-}
-
 function renderTrendlines(){
     const svg = tlSvgEl();
     const info = tlInfoLayer();
@@ -1306,13 +1293,15 @@ function renderTrendlines(){
     if(!xs || !ys) return;
 
     let html = '';
+    // rectangle invisible plein écran pour capter le clic "vide" et dessiner une nouvelle ligne
+    html += `<rect id="tl-canvas-catch" x="0" y="0" width="100%" height="100%" fill="transparent" style="pointer-events:${trendlineMode?'auto':'none'};cursor:crosshair;"></rect>`;
     trendlines.forEach(tl=>{
         const p1 = tlDataToLocalPx(tl.x1, tl.y1);
         const p2 = tlDataToLocalPx(tl.x2, tl.y2);
         html += `<line class="tl-hit"  data-id="${tl.id}" data-action="move" x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}"></line>`;
         html += `<line class="tl-line" data-id="${tl.id}" data-action="move" x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}"></line>`;
-        html += `<circle class="tl-handle" data-id="${tl.id}" data-action="p1" cx="${p1.x}" cy="${p1.y}" r="6"></circle>`;
-        html += `<circle class="tl-handle" data-id="${tl.id}" data-action="p2" cx="${p2.x}" cy="${p2.y}" r="6"></circle>`;
+        html += `<circle class="tl-handle" data-id="${tl.id}" data-action="p1" cx="${p1.x}" cy="${p1.y}" r="7"></circle>`;
+        html += `<circle class="tl-handle" data-id="${tl.id}" data-action="p2" cx="${p2.x}" cy="${p2.y}" r="7"></circle>`;
     });
     svg.innerHTML = html;
 
@@ -1327,6 +1316,8 @@ function renderTrendlines(){
         </div>`;
     }).join('');
 
+    const catchEl = svg.querySelector('#tl-canvas-catch');
+    if(catchEl) catchEl.addEventListener('mousedown', tlOnCanvasMouseDown);
     svg.querySelectorAll('.tl-handle, .tl-hit').forEach(el=>{
         el.addEventListener('mousedown', tlOnHandleMouseDown);
     });
@@ -1337,6 +1328,37 @@ function renderTrendlines(){
             removeTrendline(parseInt(btn.getAttribute('data-id')));
         });
     });
+}
+
+// Dessiner une nouvelle trendline en cliquant-glissant sur une zone vide du graphique
+function tlOnCanvasMouseDown(e){
+    if(!trendlineMode) return;
+    e.stopPropagation(); e.preventDefault();
+    const start = tlClientToData(e.clientX, e.clientY);
+    if(!start) return;
+    const newTl = { id: tlNextId++, x1:start.idx, y1:start.price, x2:start.idx, y2:start.price };
+    trendlines.push(newTl);
+    renderTrendlines();
+
+    const onMove = (ev)=>{
+        const d = tlClientToData(ev.clientX, ev.clientY);
+        if(!d) return;
+        newTl.x2 = d.idx; newTl.y2 = d.price;
+        renderTrendlines();
+    };
+    const onUp = ()=>{
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+        const p1 = tlDataToLocalPx(newTl.x1, newTl.y1);
+        const p2 = tlDataToLocalPx(newTl.x2, newTl.y2);
+        const dist = Math.hypot(p2.x-p1.x, p2.y-p1.y);
+        if(dist < 15){
+            trendlines = trendlines.filter(t=>t.id!==newTl.id);
+            renderTrendlines();
+        }
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
 }
 
 function tlOnHandleMouseDown(e){
@@ -1390,10 +1412,6 @@ function toggleTrendlineMode(){
         } else {
             chart.options.plugins.zoom.pan.enabled = tlWasPanEnabled;
         }
-    }
-    if(trendlineMode && trendlines.length===0){
-        const tl = tlCreateDefaultLine();
-        if(tl) trendlines.push(tl);
     }
     renderTrendlines();
 }
