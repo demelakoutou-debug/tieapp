@@ -1297,6 +1297,7 @@ function renderTrendlines(){
     svg.setAttribute('width', layerW);
     svg.setAttribute('height', layerH);
     svg.setAttribute('viewBox', `0 0 ${layerW} ${layerH}`);
+    svg.setAttribute('preserveAspectRatio', 'none');
 
     let html = '';
     // rectangle invisible plein écran (dimensions explicites en px) pour capter le clic "vide" et dessiner une nouvelle ligne
