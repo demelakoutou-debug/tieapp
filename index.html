@@ -965,13 +965,52 @@ function applyRestoredInputs(){
     const sel = document.getElementById('market-select');
     if([...sel.options].some(o=>o.value===currentSymbol)) sel.value = currentSymbol;
 }
+/* ════════════════════════════════════════════
+   RESTAURATION DE LA VISIBILITÉ DES INDICATEURS
+   ─────────────────────────────────────────
+   IMPORTANT (fix persistance) : les variables globales showSAR /
+   showFractal / showST / showMA / showCEL / showLevels sont déjà
+   fixées depuis appSettings AVANT l'appel à initChart() (voir
+   window.onload plus bas), puisque initChart() lit ces variables pour
+   déterminer la visibilité initiale de chaque dataset Chart.js
+   (hidden:!showX). Cette fonction ne fait donc plus de "toggle" (ce
+   mécanisme de diff était fragile et pouvait laisser l'UI dans un état
+   incohérent après un refresh) : elle se contente de resynchroniser
+   l'affichage (canvas + boutons + panneaux de paramètres + niveaux)
+   avec l'état déjà correct des variables.
+════════════════════════════════════════════ */
 function applyRestoredIndicatorVisibility(){
-    if(appSettings.showSAR     !== showSAR)     toggleIndicator('sar');
-    if(appSettings.showFractal !== showFractal) toggleIndicator('fractal');
-    if(appSettings.showST      !== showST)      toggleIndicator('st');
-    if(appSettings.showMA      !== showMA)      toggleIndicator('ma');
-    if(appSettings.showCEL     !== showCEL)     toggleIndicator('cel');
-    if(appSettings.showLevels  !== showLevels)  toggleLevels();
+    chart.setDatasetVisibility(1, showSAR);
+    chart.setDatasetVisibility(2, showFractal);
+    chart.setDatasetVisibility(3, showFractal);
+    chart.setDatasetVisibility(4, showST);
+    chart.setDatasetVisibility(5, showST);
+    chart.setDatasetVisibility(6, showMA);
+    chart.setDatasetVisibility(7, showCEL);
+    chart.setDatasetVisibility(8, showCEL);
+    chart.update('none');
+
+    document.getElementById('btn-sar').classList.toggle('active', showSAR);
+    document.getElementById('param-sar').style.display = showSAR ? '' : 'none';
+
+    document.getElementById('btn-fractal').classList.toggle('active', showFractal);
+    document.getElementById('param-frc').style.display = showFractal ? '' : 'none';
+    if(!showFractal) clearPeakLabels();
+
+    document.getElementById('btn-st').classList.toggle('active', showST);
+    document.getElementById('param-st').style.display = showST ? '' : 'none';
+
+    document.getElementById('btn-ma').classList.toggle('active', showMA);
+    document.getElementById('param-ma').style.display = showMA ? '' : 'none';
+
+    document.getElementById('btn-cel').classList.toggle('active', showCEL);
+    document.getElementById('param-cel').style.display = showCEL ? '' : 'none';
+
+    document.getElementById('btn-levels').classList.toggle('active', showLevels);
+    const d = showLevels ? '' : 'none';
+    ['hline-high','hline-low','hline-curr','badge-high','badge-low','badge-curr'].forEach(id=>{
+        const e=document.getElementById(id); if(e) e.style.display=d;
+    });
 }
 function resetIndicatorParams(which){
     if(which==='sar'){
@@ -2722,6 +2761,19 @@ function loadPanelVisibility(){
 
 window.onload = async () => {
     loadSettings();
+    /* IMPORTANT (fix persistance des indicateurs) : on fixe l'état des
+       indicateurs depuis les réglages sauvegardés AVANT de créer le
+       graphique, car initChart() lit ces variables globales pour définir
+       la visibilité initiale des datasets (hidden:!showX). Sans ça, le
+       graphique démarrait toujours avec les valeurs par défaut codées en
+       dur (SAR/Fractal/ST activés, MA/CE désactivés), quoi que vous ayez
+       choisi avant le rafraîchissement de la page. */
+    showSAR     = appSettings.showSAR;
+    showFractal = appSettings.showFractal;
+    showST      = appSettings.showST;
+    showMA      = appSettings.showMA;
+    showCEL     = appSettings.showCEL;
+    showLevels  = appSettings.showLevels;
     initChart();
     applyRestoredInputs();
     applyRestoredIndicatorVisibility();
