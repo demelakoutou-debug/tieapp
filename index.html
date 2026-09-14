@@ -56,6 +56,7 @@
         .badge-sar { background:rgba(255,170,64,.15); color:var(--orange); }
         .badge-frc { background:rgba(180,122,255,.15); color:var(--purple); }
         .badge-ma  { background:rgba(77,208,225,.15); color:#4dd0e1; }
+        .badge-cel { background:rgba(244,114,182,.15); color:#f472b6; }
         .param-row { display:flex; align-items:center; gap:5px; }
         .param-lbl { color:var(--muted); font-size:10px; white-space:nowrap; }
         .param-input { width:54px; background:var(--bg); border:1px solid var(--border2); color:#fff;
@@ -410,6 +411,11 @@
                 </select>
             </div>
         </div>
+        <div class="param-section" id="param-cel" style="display:none;">
+            <span class="param-badge badge-cel" onclick="resetIndicatorParams('cel')" style="cursor:pointer" title="Réinitialiser Chandelier Exit par défaut">CE ↺</span>
+            <div class="param-row"><span class="param-lbl">Période</span><input class="param-input wide" type="number" id="cel-period" value="22" step="1" min="2" onchange="rebuildCELFromHistory();onParamsChanged();"></div>
+            <div class="param-row"><span class="param-lbl">Mult</span><input class="param-input wide" type="number" id="cel-mult" value="3" step="0.5" min="0.5" onchange="rebuildCELFromHistory();onParamsChanged();"></div>
+        </div>
     </div>
     <div class="header-right">
         <div class="stat-block"><span class="stat-lbl">Max</span><span class="stat-val val-high" id="stat-high">—</span></div>
@@ -659,6 +665,7 @@
             <button class="chart-tool-btn active" id="btn-fractal" onclick="toggleIndicator('fractal')" data-tip="Fractals"><span class="ctb-dot" style="background:var(--purple)"></span>FT</button>
             <button class="chart-tool-btn active" id="btn-st" onclick="toggleIndicator('st')" data-tip="SuperTrend"><span class="ctb-dot" style="background:#ffc800"></span>ST</button>
             <button class="chart-tool-btn" id="btn-ma" onclick="toggleIndicator('ma')" data-tip="Moyenne Mobile"><span class="ctb-dot" style="background:#4dd0e1"></span>MA</button>
+            <button class="chart-tool-btn" id="btn-cel" onclick="toggleIndicator('cel')" data-tip="Chandelier Exit"><span class="ctb-dot" style="background:#f472b6"></span>CE</button>
             <button class="chart-tool-btn active" id="btn-levels" onclick="toggleLevels()" data-tip="Niveaux (Max/Min/Prix)"><span class="ctb-dot" style="background:var(--green)"></span>Nv</button>
             <button class="chart-tool-btn active" id="btn-autoscroll" onclick="toggleAutoScroll()" data-tip="Auto-scroll"><span class="ctb-dot" style="background:var(--accent)"></span>→</button>
             <div class="chart-toolbar-sep"></div>
@@ -799,8 +806,93 @@ function stStepNewTick(price){
     if(showST && r.ready) trackSTBreak(r.trend);
 }
 
+/* ════════════════════════════════════════════
+   CHANDELIER EXIT INCRÉMENTAL
+   ─────────────────────────────────────────
+   Cousin du SuperTrend : au lieu d'une bande ATR autour du prix, c'est
+   un stop suiveur ancré sur le plus haut/plus bas des N derniers ticks,
+   reculé d'un multiple de la volatilité (ATR). Tant que le prix reste
+   au-dessus du stop haussier (ou en dessous du stop baissier), la
+   tendance tient ; dès qu'il le franchit, le stop bascule de l'autre
+   côté — même principe de "flip" que le SuperTrend.
+   Comme pour le SuperTrend (voir plus haut), le calcul est incrémental
+   et le stop "ratchette" (ne peut que se resserrer dans le sens de la
+   tendance en cours) pour éviter les fausses cassures dues à un
+   recalcul complet depuis un nouveau point de départ à chaque tick.
+   Le plus haut/plus bas glissant est recalculé sur le tampon des N
+   derniers prix (période typiquement modeste, ~22), donc en O(période)
+   par tick — négligeable.
+════════════════════════════════════════════ */
+let celLongArr = [];   // aligné 1:1 avec ticksData.prices — stop haussier actif
+let celShortArr = [];  // aligné 1:1 avec ticksData.prices — stop baissier actif
+let celIncr = { period:null, mult:null, buf:[], sumP:0, sumSqP:0, longStop:null, shortStop:null, trend:0, ready:false };
+
+function resetCELIncremental(){
+    celIncr = { period:null, mult:null, buf:[], sumP:0, sumSqP:0, longStop:null, shortStop:null, trend:0, ready:false };
+    celLongArr = []; celShortArr = [];
+}
+function celStepOne(price, period, mult){
+    if(celIncr.period !== period || celIncr.mult !== mult){
+        celIncr.period = period; celIncr.mult = mult;
+        celIncr.buf = []; celIncr.sumP = 0; celIncr.sumSqP = 0;
+        celIncr.longStop = null; celIncr.shortStop = null; celIncr.trend = 0; celIncr.ready = false;
+    }
+    celIncr.buf.push(price);
+    celIncr.sumP += price; celIncr.sumSqP += price*price;
+    if(celIncr.buf.length > period){
+        const old = celIncr.buf.shift();
+        celIncr.sumP -= old; celIncr.sumSqP -= old*old;
+    }
+    const cnt = celIncr.buf.length;
+    if(cnt < period) return { long:null, short:null, trend:0, ready:false };
+    let hh=-Infinity, ll=Infinity;
+    for(const v of celIncr.buf){ if(v>hh) hh=v; if(v<ll) ll=v; }
+    const mean = celIncr.sumP/cnt;
+    const variance = Math.max(0, celIncr.sumSqP/cnt - mean*mean);
+    const atr = Math.sqrt(variance) || 0.0001;
+    const rawLong = hh - mult*atr;
+    const rawShort = ll + mult*atr;
+    if(!celIncr.ready){
+        celIncr.longStop = rawLong; celIncr.shortStop = rawShort;
+        celIncr.trend = price >= rawLong ? 1 : -1;
+        celIncr.ready = true;
+    } else {
+        celIncr.longStop  = celIncr.trend===1  ? Math.max(celIncr.longStop, rawLong)  : rawLong;
+        celIncr.shortStop = celIncr.trend===-1 ? Math.min(celIncr.shortStop, rawShort) : rawShort;
+        if(celIncr.trend===1 && price < celIncr.longStop){ celIncr.trend=-1; celIncr.shortStop=rawShort; }
+        else if(celIncr.trend===-1 && price > celIncr.shortStop){ celIncr.trend=1; celIncr.longStop=rawLong; }
+    }
+    return {
+        long:  celIncr.trend===1  ? celIncr.longStop  : null,
+        short: celIncr.trend===-1 ? celIncr.shortStop : null,
+        trend: celIncr.trend, ready:true
+    };
+}
+function getCELParams(){
+    return {
+        period: parseInt(document.getElementById('cel-period').value)||22,
+        mult:   parseFloat(document.getElementById('cel-mult').value)||3
+    };
+}
+function rebuildCELFromHistory(){
+    resetCELIncremental();
+    const {period, mult} = getCELParams();
+    for(const price of ticksData.prices){
+        const r = celStepOne(price, period, mult);
+        celLongArr.push(r.long);
+        celShortArr.push(r.short);
+    }
+}
+function celStepNewTick(price){
+    const {period, mult} = getCELParams();
+    const r = celStepOne(price, period, mult);
+    celLongArr.push(r.long);
+    celShortArr.push(r.short);
+    if(celLongArr.length > 6000){ celLongArr.shift(); celShortArr.shift(); }
+}
+
 let ticksData = { times:[], prices:[], highs:[], lows:[] };
-let showSAR=true, showFractal=true, showLevels=true, showST=true, showMA=false;
+let showSAR=true, showFractal=true, showLevels=true, showST=true, showMA=false, showCEL=false;
 let autoScrollEnabled=true;
 let sessionHigh=null, sessionLow=null;
 let lastFractalPeaks = { up:[], down:[] };
@@ -839,7 +931,8 @@ const DEFAULT_SETTINGS = {
     fractalPeriod:2,
     stPeriod:10, stMult:3,
     maPeriod:20, maType:'sma',
-    showSAR:true, showFractal:true, showST:true, showMA:false, showLevels:true,
+    celPeriod:22, celMult:3,
+    showSAR:true, showFractal:true, showST:true, showMA:false, showCEL:false, showLevels:true,
     stake:1, durValue:5, durType:'t', allowEqual:false,
     autoThreshold:55, autoCooldown:10, autoCooldownUnit:'t', autoDirection:'both',
     market:'stpRNG5'
@@ -862,10 +955,13 @@ function syncSettingsFromInputs(){
     appSettings.stMult        = parseFloat(document.getElementById('st-mult').value)||DEFAULT_SETTINGS.stMult;
     appSettings.maPeriod      = parseInt(document.getElementById('ma-period').value)||DEFAULT_SETTINGS.maPeriod;
     appSettings.maType        = document.getElementById('ma-type').value||DEFAULT_SETTINGS.maType;
+    appSettings.celPeriod     = parseInt(document.getElementById('cel-period').value)||DEFAULT_SETTINGS.celPeriod;
+    appSettings.celMult       = parseFloat(document.getElementById('cel-mult').value)||DEFAULT_SETTINGS.celMult;
     appSettings.showSAR       = showSAR;
     appSettings.showFractal   = showFractal;
     appSettings.showST        = showST;
     appSettings.showMA        = showMA;
+    appSettings.showCEL       = showCEL;
     appSettings.showLevels    = showLevels;
     appSettings.stake         = parseFloat(document.getElementById('stake-input').value)||DEFAULT_SETTINGS.stake;
     appSettings.durValue      = parseInt(document.getElementById('dur-value').value)||DEFAULT_SETTINGS.durValue;
@@ -892,6 +988,8 @@ function applyRestoredInputs(){
     document.getElementById('st-mult').value        = appSettings.stMult;
     document.getElementById('ma-period').value      = appSettings.maPeriod;
     document.getElementById('ma-type').value        = appSettings.maType;
+    document.getElementById('cel-period').value     = appSettings.celPeriod;
+    document.getElementById('cel-mult').value       = appSettings.celMult;
     document.getElementById('stake-input').value    = appSettings.stake;
     document.getElementById('dur-value').value      = appSettings.durValue;
     applyDurTypeUI(appSettings.durType);
@@ -911,6 +1009,7 @@ function applyRestoredIndicatorVisibility(){
     if(appSettings.showFractal !== showFractal) toggleIndicator('fractal');
     if(appSettings.showST      !== showST)      toggleIndicator('st');
     if(appSettings.showMA      !== showMA)      toggleIndicator('ma');
+    if(appSettings.showCEL     !== showCEL)     toggleIndicator('cel');
     if(appSettings.showLevels  !== showLevels)  toggleLevels();
 }
 function resetIndicatorParams(which){
@@ -926,6 +1025,10 @@ function resetIndicatorParams(which){
     } else if(which==='ma'){
         document.getElementById('ma-period').value = DEFAULT_SETTINGS.maPeriod;
         document.getElementById('ma-type').value   = DEFAULT_SETTINGS.maType;
+    } else if(which==='cel'){
+        document.getElementById('cel-period').value = DEFAULT_SETTINGS.celPeriod;
+        document.getElementById('cel-mult').value    = DEFAULT_SETTINGS.celMult;
+        rebuildCELFromHistory();
     }
     onParamsChanged();
     showFeedback('↺ Paramètres '+which.toUpperCase()+' réinitialisés par défaut','pend');
@@ -1419,7 +1522,9 @@ function initChart(){
                 {label:'Fractal ▼',data:[],pointBackgroundColor:'#ff4d6a',pointBorderColor:'#ff4d6a',pointStyle:'triangle',rotation:180,pointRadius:c=>c.raw===null?0:7,showLine:false,hidden:!showFractal,order:0},
                 {label:'ST Bull',data:[],borderColor:'#00c896',borderWidth:2.5,pointRadius:0,showLine:true,hidden:!showST,tension:0,order:3},
                 {label:'ST Bear',data:[],borderColor:'#ff4d6a',borderWidth:2.5,pointRadius:0,showLine:true,hidden:!showST,tension:0,order:3},
-                {label:'MA',data:[],borderColor:'#4dd0e1',borderWidth:1.8,pointRadius:0,showLine:true,hidden:!showMA,tension:0.08,order:2}
+                {label:'MA',data:[],borderColor:'#4dd0e1',borderWidth:1.8,pointRadius:0,showLine:true,hidden:!showMA,tension:0.08,order:2},
+                {label:'CE Long',data:[],borderColor:'#2dd4bf',borderWidth:2,borderDash:[5,3],pointRadius:0,showLine:true,hidden:!showCEL,tension:0,order:3},
+                {label:'CE Short',data:[],borderColor:'#f472b6',borderWidth:2,borderDash:[5,3],pointRadius:0,showLine:true,hidden:!showCEL,tension:0,order:3}
             ]
         },
         options:{
@@ -1806,6 +1911,7 @@ function processHistory(h){
     chart.scales.y.options.max=undefined;
     updateStatDisplay();
     rebuildSTFromHistory();
+    rebuildCELFromHistory();
     updateChartData(true);
 }
 let _lastTickEpoch = 0;
@@ -1831,6 +1937,7 @@ function processNewTick(tick){
         tpUpdate();
     }
     stStepNewTick(p);
+    celStepNewTick(p);
     const el = document.getElementById('last-price');
     el.innerText   = fmt1(p);
     el.style.color = p >= (prev||p) ? 'var(--green)' : 'var(--red)';
@@ -1888,6 +1995,8 @@ function updateChartData(forceEnd=false){
     chart.data.datasets[4].data=stResult.bull;
     chart.data.datasets[5].data=stResult.bear;
     chart.data.datasets[6].data=maVals;
+    chart.data.datasets[7].data=celLongArr;
+    chart.data.datasets[8].data=celShortArr;
     chart.update('none');
     updateStreak(ticksData.prices,stResult);
     if(forceEnd)scrollToEnd();
@@ -2055,6 +2164,7 @@ function toggleIndicator(type){
     else if(type==='fractal'){showFractal=!showFractal;chart.setDatasetVisibility(2,showFractal);chart.setDatasetVisibility(3,showFractal);document.getElementById('btn-fractal').classList.toggle('active',showFractal);document.getElementById('param-frc').style.display=showFractal?'':'none';if(!showFractal)clearPeakLabels();}
     else if(type==='st'){showST=!showST;chart.setDatasetVisibility(4,showST);chart.setDatasetVisibility(5,showST);document.getElementById('btn-st').classList.toggle('active',showST);document.getElementById('param-st').style.display=showST?'':'none';}
     else if(type==='ma'){showMA=!showMA;chart.setDatasetVisibility(6,showMA);document.getElementById('btn-ma').classList.toggle('active',showMA);document.getElementById('param-ma').style.display=showMA?'':'none';}
+    else if(type==='cel'){showCEL=!showCEL;chart.setDatasetVisibility(7,showCEL);chart.setDatasetVisibility(8,showCEL);document.getElementById('btn-cel').classList.toggle('active',showCEL);document.getElementById('param-cel').style.display=showCEL?'':'none';}
     chart.update('none');
     syncSettingsFromInputs();
 }
@@ -2701,6 +2811,7 @@ document.getElementById('market-select').addEventListener('change',e=>{
     tpResetState();
     resetPayoutSim();
     resetSTIncremental();
+    resetCELIncremental();
     resetSTBreakCounter();
     resetTrendlines();
     connectChartWS();
