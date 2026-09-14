@@ -710,21 +710,6 @@ const INDICATOR_WINDOW = 1500;
 /* ════════════════════════════════════════════
    SUPERTREND INCRÉMENTAL
    ─────────────────────────────────────────
-   ⚠️ FIX BUG "fausses cassures" : le SuperTrend était recalculé depuis
-   zéro sur une fenêtre glissante à CHAQUE tick (optimisation perf). Le
-   problème : à chaque recalcul, le "point de départ" de la fenêtre
-   change (un tick plus loin), ce qui réamorce le mécanisme en cascade
-   (upper/lower/trend) avec un nouveau point de départ arbitraire — et
-   pouvait faire basculer la classification de tendance SANS aucun vrai
-   mouvement de prix significatif. D'où des cassures fantômes qui
-   redémarraient le compteur à zéro alors qu'il n'y avait pas de vraie
-   cassure.
-   Le calcul est maintenant INCRÉMENTAL : un état persistant (bande haute/
-   basse, tendance, fenêtre glissante pour l'écart-type) avance d'UN seul
-   tick à chaque nouveau prix, jamais réamorcé — sauf reconstruction
-   volontaire complète (chargement d'historique, changement de marché,
-   ou changement des paramètres Période/Mult, qui redéfinissent le calcul
-   et doivent repartir proprement).
 ════════════════════════════════════════════ */
 let stBullArr = [];  // aligné 1:1 avec ticksData.prices
 let stBearArr = [];
@@ -809,19 +794,6 @@ function stStepNewTick(price){
 /* ════════════════════════════════════════════
    CHANDELIER EXIT INCRÉMENTAL
    ─────────────────────────────────────────
-   Cousin du SuperTrend : au lieu d'une bande ATR autour du prix, c'est
-   un stop suiveur ancré sur le plus haut/plus bas des N derniers ticks,
-   reculé d'un multiple de la volatilité (ATR). Tant que le prix reste
-   au-dessus du stop haussier (ou en dessous du stop baissier), la
-   tendance tient ; dès qu'il le franchit, le stop bascule de l'autre
-   côté — même principe de "flip" que le SuperTrend.
-   Comme pour le SuperTrend (voir plus haut), le calcul est incrémental
-   et le stop "ratchette" (ne peut que se resserrer dans le sens de la
-   tendance en cours) pour éviter les fausses cassures dues à un
-   recalcul complet depuis un nouveau point de départ à chaque tick.
-   Le plus haut/plus bas glissant est recalculé sur le tampon des N
-   derniers prix (période typiquement modeste, ~22), donc en O(période)
-   par tick — négligeable.
 ════════════════════════════════════════════ */
 let celLongArr = [];   // aligné 1:1 avec ticksData.prices — stop haussier actif
 let celShortArr = [];  // aligné 1:1 avec ticksData.prices — stop baissier actif
@@ -913,17 +885,6 @@ const fmt1 = v => v != null ? v.toFixed(1) : '—';
 /* ════════════════════════════════════════════
    PARAMÈTRES PERSISTANTS
    ─────────────────────────────────────────
-   Tous les réglages (paramètres des indicateurs, mise, durée, Allow
-   Equal, config Auto-Trade, marché sélectionné, mode de vue du
-   graphique) sont sauvegardés dans localStorage à chaque modification
-   et restaurés au chargement de la page — un rafraîchissement ne fait
-   plus rien perdre.
-   ⚠️ Exception volontaire : l'activation ON/OFF de l'Auto-Trade
-   n'est PAS restaurée automatiquement, par sécurité — pour éviter
-   qu'un simple rechargement de page ne relance du trading automatique
-   en argent réel sans action explicite de ta part. Sa configuration
-   (seuil, cooldown, direction) est bien conservée, seul le bouton
-   ON/OFF repart à OFF à chaque chargement.
 ════════════════════════════════════════════ */
 const SETTINGS_KEY = 'app_settings_v1';
 const DEFAULT_SETTINGS = {
@@ -1037,15 +998,6 @@ function resetIndicatorParams(which){
 /* ════════════════════════════════════════════
    RÉSOLUTION DYNAMIQUE DES SYMBOLES STEP INDEX
    ─────────────────────────────────────────
-   ⚠️ FIX RACINE : le log console a révélé que "stpRNG5" (et probablement
-   les autres codes codés en dur type stpRNG2/3/4) sont acceptés par
-   ticks_history (données historiques) mais REJETÉS par l'abonnement ticks
-   temps réel ("InvalidSymbol"). Autrement dit ces codes sont périmés côté
-   Deriv pour le live, même s'ils marchent encore pour l'historique.
-   Plutôt que deviner d'autres noms, on interroge Deriv lui-même
-   ("active_symbols") pour récupérer la liste réelle et actuelle des
-   marchés Step Index, et on reconstruit le sélecteur avec ces symboles
-   garantis valides pour le flux temps réel.
 ════════════════════════════════════════════ */
 function fetchActiveStepSymbolsAndInit(){
     let done=false;
@@ -1058,12 +1010,6 @@ function fetchActiveStepSymbolsAndInit(){
     };
     const timeout=setTimeout(fallback,6000);
     probe.onopen=()=>{
-        /* ⚠️ landing_company:'svg' est nécessaire : sans authentification,
-           active_symbols se base sur la géolocalisation de l'IP pour
-           déduire la landing company, et celle-ci n'inclut pas forcément
-           les indices synthétiques (Step/Volatility/Boom-Crash), qui ne
-           sont proposés que sous "svg" (Deriv (SVG) LLC). C'est
-           probablement pourquoi la liste revenait vide. */
         probe.send(JSON.stringify({active_symbols:'brief', product_type:'basic', landing_company:'svg'}));
     };
     probe.onmessage=evt=>{
@@ -1117,11 +1063,6 @@ function fetchActiveStepSymbolsAndInit(){
 /* ════════════════════════════════════════════
    TRADING — ARCHITECTURE PKCE + REST + OTP + WS
    ─────────────────────────────────────────
-   1. PKCE → auth.deriv.com → code dans URL
-   2. Échange code → access_token (POST /oauth2/token)
-   3. GET /trading/v1/options/accounts → liste DOT/ROT
-   4. POST /accounts/{id}/otp → wsUrl authentifiée
-   5. WebSocket sur wsUrl → trades (proposal+buy)
 ════════════════════════════════════════════ */
 
 let accessToken    = null;   // Bearer token OAuth
@@ -1270,12 +1211,6 @@ function openTradingWS(wsUrl, accountId){
         showFeedback('✓ Connecté — '+label+' '+accountId,'ok');
         /* Souscrire au solde en temps réel */
         wsTrading.send(JSON.stringify({balance:1, subscribe:1}));
-        /* ⚠️ FIX RACINE : les ticks live des Step Index sont rejetés
-           ("InvalidSymbol") sur le canal PUBLIC anonyme (app_id=1089), mais
-           fonctionnent normalement sur la WebSocket AUTHENTIFIÉE du compte
-           (celle-ci, obtenue via OAuth+OTP). On y souscrit donc les ticks
-           ici, et on coupe le repli par polling qui compensait leur
-           absence pour les utilisateurs non connectés. */
         subscribeTradingTicks();
         stopPublicPolling();
         /* Keepalive ping toutes les 25s */
@@ -1578,18 +1513,6 @@ window.addEventListener('mouseup',()=>{
 /* ════════════════════════════════════════════
    OUTIL TENDANCE (trendline) — avec poignées déplaçables
    ─────────────────────────────────────────
-   Chaque tendance est composée de :
-     - 2 poignées ("point" annotations, ronds jaunes) que l'on attrape
-       à la souris et fait glisser pour repositionner/redimensionner
-       la ligne ;
-     - 1 segment plein entre les deux poignées ;
-     - 1 prolongement en pointillé qui suit automatiquement le marché
-       vers la droite, sans déplacer les poignées elles-mêmes.
-   L'accroche/glisser est gérée "à la main" (hit-test au pixel près
-   autour de chaque poignée) plutôt que via le draggable natif du
-   plugin, pour garder un contrôle total et éviter les conflits avec
-   le pan/zoom du graphique (désactivé le temps du glissement).
-   Double-clic sur une poignée : supprime la tendance correspondante.
 ════════════════════════════════════════════ */
 let trendlineMode  = false;
 let trendlineDraft = null;   // premier point cliqué, en attente du second
@@ -1787,14 +1710,6 @@ let _tickWatchdog = null;
 let publicPollTimer = null;
 const PUBLIC_POLL_MS = 3000;
 
-/* ════ REPLI PAR POLLING (non connecté à un compte Deriv) ════
-   Sur le canal public anonyme (app_id=1089), l'abonnement "ticks" pour les
-   Step Index renvoie une erreur InvalidSymbol — c'est une limitation
-   connue de Deriv sur ce canal pour ces symboles précis (l'historique
-   ticks_history fonctionne, mais pas le flux live). Tant que l'utilisateur
-   n'est pas connecté à son compte (voir subscribeTradingTicks, qui utilise
-   le canal AUTHENTIFIÉ où le live fonctionne), on republie régulièrement
-   la requête d'historique pour rafraîchir le graphique. */
 function startPublicPolling(){
     stopPublicPolling();
     publicPollTimer = setInterval(()=>{
@@ -1855,14 +1770,6 @@ function connectChartWS(){
     wsChart.onerror=(ev)=>{ console.error('[Deriv WS] erreur socket:', ev); try{wsChart.close();}catch(e){} };
 }
 
-/* ════ WATCHDOG ANTI-GEL ════
-   Certaines WebSocket restent "ouvertes" (readyState OPEN) côté navigateur
-   mais arrêtent silencieusement de recevoir des données (connexion "zombie",
-   proxy/CDN qui coupe le flux, veille de l'onglet, etc). Sans cette
-   vérification, le graphique reste figé indéfiniment sans qu'aucune erreur
-   ne soit levée. On force une reconnexion propre si aucun tick/historique
-   n'est arrivé depuis 20 secondes (laisse une marge au polling 3s + à
-   l'espacement naturel des ticks Step Index). */
 if(_tickWatchdog) clearInterval(_tickWatchdog);
 _tickWatchdog = setInterval(()=>{
     if(!wsChart) return;
@@ -1961,13 +1868,6 @@ function updateChartData(forceEnd=false){
     const maPeriod=parseInt(document.getElementById('ma-period').value)||20;
     const maType=document.getElementById('ma-type').value||'sma';
 
-    /* ⚠️ FIX PERFORMANCE : ne calculer SAR / Fractals / SuperTrend que sur
-       une fenêtre récente (INDICATOR_WINDOW points) plutôt que sur tout
-       l'historique (jusqu'à 6000 points), recalculé intégralement à
-       CHAQUE tick. Ce recalcul complet bloquait le thread JS assez
-       longtemps pour que plusieurs ticks WebSocket s'accumulent avant le
-       prochain rendu — c'est la cause principale des "sauts" de 2-4 ticks
-       au lieu d'un affichage fluide tick par tick. */
     const n = ticksData.prices.length;
     const winStart = Math.max(0, n - INDICATOR_WINDOW);
     const wPrices = ticksData.prices.slice(winStart);
@@ -1980,10 +1880,6 @@ function updateChartData(forceEnd=false){
     const fractals = { up: padNull(fractalsW.up), down: padNull(fractalsW.down) };
     lastFractalPeaks=extractPeaks(ticksData.prices,fractals,fracPer);
 
-    /* Le SuperTrend n'est plus recalculé ici : il avance de façon
-       incrémentale (voir stStepNewTick / rebuildSTFromHistory) et les
-       tableaux stBullArr/stBearArr sont déjà alignés 1:1 sur
-       ticksData.prices — on les utilise tels quels. */
     const stResult = { bull: stBullArr, bear: stBearArr };
     const maValsW = maType==='ema' ? calculateEMA(wPrices,maPeriod) : calculateSMA(wPrices,maPeriod);
     const maVals = padNull(maValsW);
@@ -2303,12 +2199,6 @@ function placeDoubleTrade(){
 }
 
 /* ════════════════════════════════════════════
-   AUTO-TRADE MARKOV — COOLDOWN INTELLIGENT
-   — Après chaque trade déclenché, un cooldown
-     s'active (ticks ou secondes personnalisés)
-   — Pendant le cooldown : toutes les opportunités
-     sont ignorées silencieusement (pas de file)
-   — Le compteur visible s'affiche en temps réel
 ════════════════════════════════════════════ */
 let autoTradeOn       = false;
 let autoTradeCooldown = false;
@@ -2455,17 +2345,6 @@ function calculateSuperTrend(prices,_h,_l,period,mult){
     const p=Math.min(period,Math.floor(n/2)-1);
     if(p<2||n<p+2)return{bull,bear,trend};
 
-    /* ⚠️ FIX "Période" inactif : un Step Index bouge d'un pas de taille
-       FIXE à chaque tick (+0.1 ou -0.1). L'ancienne mesure de volatilité
-       (moyenne lissée de l'écart tick-à-tick) est donc quasi constante
-       quelle que soit la fenêtre de lissage choisie — lisser sur 5 ticks
-       ou sur 100 ticks donnait presque le même résultat, d'où "Période"
-       qui semblait sans effet alors que "Mult" agissait normalement.
-       On mesure maintenant la volatilité comme l'écart-type glissant du
-       PRIX sur la fenêtre "Période" : cette mesure dépend réellement de
-       la taille de la fenêtre (plus la période est grande, plus elle
-       capture d'amplitude de mouvement), rendant le paramètre pleinement
-       fonctionnel. Calcul en O(n) via sommes glissantes. */
     const atr=new Array(n).fill(0);
     let sum=0, sumSq=0;
     for(let i=0;i<n;i++){
@@ -2557,14 +2436,7 @@ function evaluateMarkovSignal(){
 const tpTable = {};
 const TP_CTX = 4;
 const TP_MIN_OBS = 20;
-/* ⚠️ FIX PERFORMANCE : tpUpdate() reconstruisait TOUTE la table à chaque
-   tick en reparcourant tout l'historique (des milliers de points) — ce
-   calcul bloquait le thread JS assez longtemps pour que plusieurs ticks
-   WebSocket s'accumulent avant le prochain rendu, d'où l'effet "le prix
-   saute de 2-3-4 ticks" au lieu d'être fluide. On rend maintenant le calcul
-   incrémental : à chaque tick, on ne traite QUE le nouveau point devenu
-   éligible (O(1) au lieu de O(n)), et on garde des totaux cumulés au lieu
-   de les re-sommer sur toute la table à chaque fois. */
+
 let tpNextT = TP_CTX;
 let tpTotalObs = 0, tpTotalTies1 = 0;
 
@@ -2668,15 +2540,6 @@ function computePTie(n){
 /* ════════════════════════════════════════════
    SIMULATEUR PAYOUT — Durée "Heure de fin"
    ─────────────────────────────────────────
-   Sur Deriv, en mode "Heure de fin" (par opposition à une durée fixe en
-   ticks/secondes), le nombre de ticks restants avant l'expiration du
-   contrat diminue de 1 à CHAQUE tick qui passe. Or :
-     - reste IMPAIR de ticks → tie impossible → payout STANDARD
-     - reste PAIR de ticks   → tie possible   → payout COMPENSATION (élevé)
-   Comme ce compte restant diminue de 1 à chaque tick, sa parité s'inverse
-   nécessairement à CHAQUE tick — indépendamment du sens du prix (hausse
-   ou baisse). C'est une simulation pure de ce mécanisme d'alternance,
-   sans calcul ni affichage du payout réel — juste l'indicateur visuel.
 ════════════════════════════════════════════ */
 let psParity = 0; // 0 = pair (compensation), 1 = impair (standard) — phase arbitraire
 let psHistory = []; // {dir:'U'|'D', mode:'comp'|'std'}
@@ -2723,13 +2586,6 @@ function togglePayoutSimHistory(){
 /* ════════════════════════════════════════════
    COMPTEUR DE CASSURES SUPERTREND
    ─────────────────────────────────────────
-   À chaque tick, on regarde la direction actuelle du SuperTrend (haussier
-   ▲ / baissier ▼). Tant qu'elle ne change pas, un compteur s'incrémente
-   en temps réel (le nombre de ticks depuis la dernière cassure de bande).
-   Dès que la direction bascule, le segment précédent est archivé dans
-   l'historique (coloré vert/rouge comme le Simulateur Payout) et le
-   compteur repart de zéro pour la nouvelle direction. On garde les 10
-   dernières cassures.
 ════════════════════════════════════════════ */
 let stTrackDir = 0;      // 0 = pas encore initialisé, 1 = haussier, -1 = baissier
 let stTrackCount = 0;    // ticks écoulés depuis la dernière cassure
