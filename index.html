@@ -192,6 +192,17 @@
         .chart-tool-btn[data-tip]:hover::after { opacity: 1; visibility: visible; }
         canvas { display:block; width:100% !important; height:100% !important; }
 
+        /* ── Badge flottant Payout Simulator (coin opposé aux indicateurs) ── */
+        #ps-float-badge {
+            position: absolute; top: 14px; right: 20px; z-index: 9;
+            padding: 6px 14px; border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700;
+            white-space: nowrap; border: 1px solid transparent;
+            box-shadow: 0 2px 8px rgba(0,0,0,.4);
+        }
+        #ps-float-badge.comp { background: rgba(0,200,150,.18); color: var(--green); border-color: rgba(0,200,150,.5); }
+        #ps-float-badge.std  { background: rgba(255,77,106,.18); color: var(--red);   border-color: rgba(255,77,106,.5); }
+
         #y-drag-zone { width:58px; flex-shrink:0; cursor:ns-resize; display:flex; align-items:center; justify-content:center; z-index:5; }
         #y-drag-hint { writing-mode:vertical-rl; font-size:9px; color:var(--border2); letter-spacing:1px;
                        pointer-events:none; transition:color .2s; font-family:'JetBrains Mono',monospace; }
@@ -672,6 +683,7 @@
             <button class="chart-tool-btn" id="btn-trendline" onclick="toggleTrendlineMode()" data-tip="Tracer une tendance">📈</button>
             <button class="chart-tool-btn" id="btn-trendline-clear" onclick="clearTrendlines()" data-tip="Effacer toutes les tendances">🗑</button>
         </div>
+        <div id="ps-float-badge" class="std">🔴 STANDARD</div>
         <canvas id="cryptoChart"></canvas>
         <div id="chart-labels">
             <div class="price-hline hline-high" id="hline-high"></div>
@@ -2594,6 +2606,7 @@ function addPayoutSimTick(direction){
 function renderPayoutSim(){
     const seqEl = document.getElementById('ps-sequence');
     const curEl = document.getElementById('ps-current');
+    const floatEl = document.getElementById('ps-float-badge');
     if(!seqEl || !curEl) return;
     seqEl.innerHTML = psHistory.map(h=>{
         const arrow = h.dir==='U' ? '▲' : '▼';
@@ -2604,9 +2617,14 @@ function renderPayoutSim(){
         const last = psHistory[psHistory.length-1];
         curEl.className = 'ps-current ' + last.mode;
         curEl.innerText = last.mode==='comp' ? '🟢 COMPENSATION (tie)' : '🔴 STANDARD';
+        if(floatEl){
+            floatEl.className = last.mode;
+            floatEl.innerText = last.mode==='comp' ? '🟢 COMPENSATION' : '🔴 STANDARD';
+        }
     } else {
         curEl.className = 'ps-current std';
         curEl.innerText = '🔴 STANDARD';
+        if(floatEl){ floatEl.className = 'std'; floatEl.innerText = '🔴 STANDARD'; }
     }
 }
 function resetPayoutSim(){
