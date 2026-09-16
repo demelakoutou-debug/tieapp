@@ -218,6 +218,20 @@
         .hline-low  { border-color:rgba(255,77,106,.45); }
         .hline-curr { border-color:rgba(61,126,255,.7); border-top-style:solid; }
 
+        #osc-barrier-line {
+            position:absolute; left:0; right:62px; height:0;
+            border-top:1px dashed rgba(90,100,128,.55);
+            transform:translateY(-50%); transition:top .1s ease;
+            display:none;
+        }
+        #osc-barrier-label {
+            position:absolute; left:6px; transform:translateY(-100%);
+            font-family:'JetBrains Mono',monospace; font-size:8px; font-weight:700;
+            color:var(--muted); letter-spacing:.5px; text-transform:uppercase;
+            background:rgba(13,15,23,.7); padding:1px 5px; border-radius:3px;
+            display:none; transition:top .1s ease;
+        }
+
         .price-badge { position:absolute; right:4px; transform:translateY(-50%); transition:top .1s ease; }
         .badge-tag { font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:700;
                      padding:2px 8px; border-radius:4px; white-space:nowrap; }
@@ -696,6 +710,8 @@
             <div class="price-hline hline-high" id="hline-high"></div>
             <div class="price-hline hline-low"  id="hline-low"></div>
             <div class="price-hline hline-curr" id="hline-curr"></div>
+            <div id="osc-barrier-line"></div>
+            <div id="osc-barrier-label">Zone oscillateurs</div>
             <div class="price-badge" id="badge-high"><div class="badge-tag" id="btag-high">—</div></div>
             <div class="price-badge" id="badge-low" ><div class="badge-tag" id="btag-low">—</div></div>
             <div class="price-badge" id="badge-curr"><div class="badge-tag" id="btag-curr">—</div></div>
@@ -725,6 +741,12 @@ const RIGHT_PAD = 30, VIEW_WINDOW = 180;
    bloqué (voir updateChartData). Largement suffisant pour la
    stabilisation de ces indicateurs. */
 const INDICATOR_WINDOW = 1500;
+/* Fraction de la hauteur du graphique réservée en bas pour les
+   oscillateurs (AO, futur RSI, etc.). La ligne barrière pointillée est
+   dessinée à cette frontière, et l'axe yAO est recalculé pour que les
+   barres AO restent toujours confinées dans cette bande, quelle que
+   soit l'amplitude actuelle des valeurs. */
+const OSC_ZONE_FRACTION = 0.28;
 
 /* ════════════════════════════════════════════
    SUPERTREND INCRÉMENTAL
@@ -1034,6 +1056,7 @@ function applyRestoredIndicatorVisibility(){
 
     document.getElementById('btn-ao').classList.toggle('active', showAO);
     document.getElementById('param-ao').style.display = showAO ? '' : 'none';
+    updateOscBarrier();
 
     document.getElementById('btn-levels').classList.toggle('active', showLevels);
     const d = showLevels ? '' : 'none';
@@ -1978,22 +2001,23 @@ function updateChartData(forceEnd=false){
     chart.data.datasets[8].data=celShortArr;
     chart.data.datasets[9].data=aoVals;
     if(showAO){
-        /* Compresse les barres AO dans le tiers inférieur du graphique,
-           comme une bande d'oscillateur sous le prix, sans créer de
-           panneau séparé (canvas unique). L'axe min doit coller aux
-           valeurs réelles et le max doit être bien plus grand qu'elles
-           pour pousser les barres vers le bas plutôt que vers le haut. */
+        /* Confine les barres AO exactement dans la bande OSC_ZONE_FRACTION
+           en bas du graphique, délimitée par la ligne barrière — la
+           courbe de prix (axe 'y', séparé) ne peut donc jamais s'y
+           mélanger visuellement. */
         const visible = aoVals.filter(v=>v!=null);
         const maxAbs = visible.length ? Math.max(...visible.map(Math.abs)) : 1;
-        const m = maxAbs || 1;
-        chart.options.scales.yAO.min = -m*1.15;
-        chart.options.scales.yAO.max = m*5;
+        const m = (maxAbs || 1) * 1.1; // marge 10%
+        const totalSpan = (2*m) / OSC_ZONE_FRACTION;
+        chart.options.scales.yAO.min = -m;
+        chart.options.scales.yAO.max = -m + totalSpan;
     }
     chart.update('none');
     updateStreak(ticksData.prices,stResult);
     if(forceEnd)scrollToEnd();
     if(showLevels)updatePriceLines();
     if(showFractal)drawPeakLabels();
+    updateOscBarrier();
     if(trendlines.length)renderTrendlines();
 }
 
@@ -2095,6 +2119,30 @@ function clearPeakLabels(){
 }
 
 /* ════════════════════════════════════════════
+   LIGNE BARRIÈRE — sépare la zone prix de la
+   bande basse réservée aux oscillateurs (AO, RSI…)
+════════════════════════════════════════════ */
+function anyOscillatorActive(){
+    return showAO; /* futur RSI : return showAO || showRSI; */
+}
+function updateOscBarrier(){
+    const line = document.getElementById('osc-barrier-line');
+    const label = document.getElementById('osc-barrier-label');
+    if(!chart || !line || !label) return;
+    if(!anyOscillatorActive()){
+        line.style.display='none'; label.style.display='none';
+        return;
+    }
+    const ca=chart.chartArea, cvH=chart.canvas.offsetHeight;
+    const cH=document.getElementById('chart-labels').offsetHeight;
+    const dTop=(ca.top/cvH)*cH, dBot=(ca.bottom/cvH)*cH, dH=dBot-dTop;
+    const barrierY = dTop + (1-OSC_ZONE_FRACTION)*dH;
+    const pct=(barrierY/cH*100).toFixed(2)+'%';
+    line.style.top = pct; line.style.display='block';
+    label.style.top = pct; label.style.display='block';
+}
+
+/* ════════════════════════════════════════════
    PRICE LINES
 ════════════════════════════════════════════ */
 function updatePriceLines(){
@@ -2168,7 +2216,7 @@ function toggleIndicator(type){
     else if(type==='st'){showST=!showST;chart.setDatasetVisibility(4,showST);chart.setDatasetVisibility(5,showST);document.getElementById('btn-st').classList.toggle('active',showST);document.getElementById('param-st').style.display=showST?'':'none';}
     else if(type==='ma'){showMA=!showMA;chart.setDatasetVisibility(6,showMA);document.getElementById('btn-ma').classList.toggle('active',showMA);document.getElementById('param-ma').style.display=showMA?'':'none';}
     else if(type==='cel'){showCEL=!showCEL;chart.setDatasetVisibility(7,showCEL);chart.setDatasetVisibility(8,showCEL);document.getElementById('btn-cel').classList.toggle('active',showCEL);document.getElementById('param-cel').style.display=showCEL?'':'none';}
-    else if(type==='ao'){showAO=!showAO;chart.setDatasetVisibility(9,showAO);document.getElementById('btn-ao').classList.toggle('active',showAO);document.getElementById('param-ao').style.display=showAO?'':'none';if(showAO)updateChartData(false);}
+    else if(type==='ao'){showAO=!showAO;chart.setDatasetVisibility(9,showAO);document.getElementById('btn-ao').classList.toggle('active',showAO);document.getElementById('param-ao').style.display=showAO?'':'none';if(showAO)updateChartData(false);updateOscBarrier();}
     chart.update('none');
     syncSettingsFromInputs();
 }
@@ -2200,7 +2248,7 @@ function scrollToEnd(force){
     if(!chart||!ticksData.times.length)return;
     const total=ticksData.times.length;
     chart.zoomScale('x',{min:Math.max(0,total-VIEW_WINDOW),max:total+RIGHT_PAD-1},'default');
-    setTimeout(()=>{updatePriceLines();drawPeakLabels();},60);
+    setTimeout(()=>{updatePriceLines();drawPeakLabels();updateOscBarrier();},60);
 }
 function toggleAutoScroll(){
     autoScrollEnabled = !autoScrollEnabled;
@@ -2211,7 +2259,7 @@ function toggleAutoScroll(){
 }
 function onParamsChanged(){updateChartData(false);syncSettingsFromInputs();}
 let lTimer=null;
-function debounceLines(){clearTimeout(lTimer);lTimer=setTimeout(()=>{updatePriceLines();drawPeakLabels();},50);}
+function debounceLines(){clearTimeout(lTimer);lTimer=setTimeout(()=>{updatePriceLines();drawPeakLabels();updateOscBarrier();},50);}
 window.addEventListener('wheel',debounceLines,{passive:true});
 
 /* ════════════════════════════════════════════
@@ -2936,7 +2984,7 @@ window.onload = async () => {
     }
 
     setInterval(()=>{
-        if(ticksData.prices.length){if(showLevels)updatePriceLines();if(showFractal)drawPeakLabels();}
+        if(ticksData.prices.length){if(showLevels)updatePriceLines();if(showFractal)drawPeakLabels();updateOscBarrier();}
     },400);
 };
 </script>
