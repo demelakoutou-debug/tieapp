@@ -1514,8 +1514,7 @@ function initChart(){
             ]
         },
         options:{
-            responsive:true,maintainAspectRatio:false,
-            animation:{duration:250,easing:'easeOutQuad'},
+            responsive:true,maintainAspectRatio:false,animation:false,
             interaction:{mode:'index',intersect:false},
             layout:{padding:{right:72,top:28,bottom:28}},
             scales:{
@@ -1902,7 +1901,7 @@ function processNewTick(tick){
     el.style.color = p >= (prev||p) ? 'var(--green)' : 'var(--red)';
     updateStatDisplay();
     const atEnd = !chart || chart.scales.x.max >= chart.data.labels.length-(RIGHT_PAD+10);
-    updateChartData(atEnd, true);
+    updateChartData(atEnd);
 }
 function updateStatDisplay(){
     document.getElementById('stat-high').innerText=sessionHigh!=null?fmt1(sessionHigh):'—';
@@ -1912,7 +1911,7 @@ function updateStatDisplay(){
 /* ════════════════════════════════════════════
    CHART UPDATE
 ════════════════════════════════════════════ */
-function updateChartData(forceEnd=false, animate=false){
+function updateChartData(forceEnd=false){
     if(!chart||!ticksData.prices.length)return;
     const sarStep=parseFloat(document.getElementById('sar-step').value)||0.02;
     const sarMax=parseFloat(document.getElementById('sar-max').value)||0.2;
@@ -1945,7 +1944,7 @@ function updateChartData(forceEnd=false, animate=false){
     chart.data.datasets[6].data=maVals;
     chart.data.datasets[7].data=celLongArr;
     chart.data.datasets[8].data=celShortArr;
-    chart.update(animate ? undefined : 'none');
+    chart.update('none');
     updateStreak(ticksData.prices,stResult);
     if(forceEnd)scrollToEnd();
     if(showLevels)updatePriceLines();
