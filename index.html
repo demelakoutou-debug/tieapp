@@ -1980,12 +1980,14 @@ function updateChartData(forceEnd=false){
     if(showAO){
         /* Compresse les barres AO dans le tiers inférieur du graphique,
            comme une bande d'oscillateur sous le prix, sans créer de
-           panneau séparé (canvas unique). */
+           panneau séparé (canvas unique). L'axe min doit coller aux
+           valeurs réelles et le max doit être bien plus grand qu'elles
+           pour pousser les barres vers le bas plutôt que vers le haut. */
         const visible = aoVals.filter(v=>v!=null);
         const maxAbs = visible.length ? Math.max(...visible.map(Math.abs)) : 1;
         const m = maxAbs || 1;
-        chart.options.scales.yAO.min = -m*4;
-        chart.options.scales.yAO.max = m*1.15;
+        chart.options.scales.yAO.min = -m*1.15;
+        chart.options.scales.yAO.max = m*5;
     }
     chart.update('none');
     updateStreak(ticksData.prices,stResult);
