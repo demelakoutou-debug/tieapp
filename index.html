@@ -57,6 +57,7 @@
         .badge-frc { background:rgba(180,122,255,.15); color:var(--purple); }
         .badge-ma  { background:rgba(77,208,225,.15); color:#4dd0e1; }
         .badge-cel { background:rgba(244,114,182,.15); color:#f472b6; }
+        .badge-ao  { background:rgba(255,109,74,.15); color:#ff6d4a; }
         .param-row { display:flex; align-items:center; gap:5px; }
         .param-lbl { color:var(--muted); font-size:10px; white-space:nowrap; }
         .param-input { width:54px; background:var(--bg); border:1px solid var(--border2); color:#fff;
@@ -427,6 +428,11 @@
             <div class="param-row"><span class="param-lbl">Période</span><input class="param-input wide" type="number" id="cel-period" value="22" step="1" min="2" onchange="rebuildCELFromHistory();onParamsChanged();"></div>
             <div class="param-row"><span class="param-lbl">Mult</span><input class="param-input wide" type="number" id="cel-mult" value="3" step="0.5" min="0.5" onchange="rebuildCELFromHistory();onParamsChanged();"></div>
         </div>
+        <div class="param-section" id="param-ao" style="display:none;">
+            <span class="param-badge badge-ao" onclick="resetIndicatorParams('ao')" style="cursor:pointer" title="Réinitialiser Awesome Oscillator par défaut">AO ↺</span>
+            <div class="param-row"><span class="param-lbl">Rapide</span><input class="param-input" type="number" id="ao-fast" value="5" step="1" min="1" onchange="onParamsChanged()"></div>
+            <div class="param-row"><span class="param-lbl">Lente</span><input class="param-input" type="number" id="ao-slow" value="34" step="1" min="2" onchange="onParamsChanged()"></div>
+        </div>
     </div>
     <div class="header-right">
         <div class="stat-block"><span class="stat-lbl">Max</span><span class="stat-val val-high" id="stat-high">—</span></div>
@@ -677,6 +683,7 @@
             <button class="chart-tool-btn active" id="btn-st" onclick="toggleIndicator('st')" data-tip="SuperTrend"><span class="ctb-dot" style="background:#ffc800"></span>ST</button>
             <button class="chart-tool-btn" id="btn-ma" onclick="toggleIndicator('ma')" data-tip="Moyenne Mobile"><span class="ctb-dot" style="background:#4dd0e1"></span>MA</button>
             <button class="chart-tool-btn" id="btn-cel" onclick="toggleIndicator('cel')" data-tip="Chandelier Exit"><span class="ctb-dot" style="background:#f472b6"></span>CE</button>
+            <button class="chart-tool-btn" id="btn-ao" onclick="toggleIndicator('ao')" data-tip="Awesome Oscillator"><span class="ctb-dot" style="background:#ff6d4a"></span>AO</button>
             <button class="chart-tool-btn active" id="btn-levels" onclick="toggleLevels()" data-tip="Niveaux (Max/Min/Prix)"><span class="ctb-dot" style="background:var(--green)"></span>Nv</button>
             <button class="chart-tool-btn active" id="btn-autoscroll" onclick="toggleAutoScroll()" data-tip="Auto-scroll"><span class="ctb-dot" style="background:var(--accent)"></span>→</button>
             <div class="chart-toolbar-sep"></div>
@@ -876,7 +883,7 @@ function celStepNewTick(price){
 }
 
 let ticksData = { times:[], prices:[], highs:[], lows:[] };
-let showSAR=true, showFractal=true, showLevels=true, showST=true, showMA=false, showCEL=false;
+let showSAR=true, showFractal=true, showLevels=true, showST=true, showMA=false, showCEL=false, showAO=false;
 let autoScrollEnabled=true;
 let sessionHigh=null, sessionLow=null;
 let lastFractalPeaks = { up:[], down:[] };
@@ -905,7 +912,8 @@ const DEFAULT_SETTINGS = {
     stPeriod:10, stMult:3,
     maPeriod:20, maType:'sma',
     celPeriod:22, celMult:3,
-    showSAR:true, showFractal:true, showST:true, showMA:false, showCEL:false, showLevels:true,
+    aoFast:5, aoSlow:34,
+    showSAR:true, showFractal:true, showST:true, showMA:false, showCEL:false, showAO:false, showLevels:true,
     stake:1, durValue:5, durType:'t', allowEqual:false,
     autoThreshold:55, autoCooldown:10, autoCooldownUnit:'t', autoDirection:'both',
     market:'stpRNG5'
@@ -930,11 +938,14 @@ function syncSettingsFromInputs(){
     appSettings.maType        = document.getElementById('ma-type').value||DEFAULT_SETTINGS.maType;
     appSettings.celPeriod     = parseInt(document.getElementById('cel-period').value)||DEFAULT_SETTINGS.celPeriod;
     appSettings.celMult       = parseFloat(document.getElementById('cel-mult').value)||DEFAULT_SETTINGS.celMult;
+    appSettings.aoFast        = parseInt(document.getElementById('ao-fast').value)||DEFAULT_SETTINGS.aoFast;
+    appSettings.aoSlow        = parseInt(document.getElementById('ao-slow').value)||DEFAULT_SETTINGS.aoSlow;
     appSettings.showSAR       = showSAR;
     appSettings.showFractal   = showFractal;
     appSettings.showST        = showST;
     appSettings.showMA        = showMA;
     appSettings.showCEL       = showCEL;
+    appSettings.showAO        = showAO;
     appSettings.showLevels    = showLevels;
     appSettings.stake         = parseFloat(document.getElementById('stake-input').value)||DEFAULT_SETTINGS.stake;
     appSettings.durValue      = parseInt(document.getElementById('dur-value').value)||DEFAULT_SETTINGS.durValue;
@@ -963,6 +974,8 @@ function applyRestoredInputs(){
     document.getElementById('ma-type').value        = appSettings.maType;
     document.getElementById('cel-period').value     = appSettings.celPeriod;
     document.getElementById('cel-mult').value       = appSettings.celMult;
+    document.getElementById('ao-fast').value        = appSettings.aoFast;
+    document.getElementById('ao-slow').value        = appSettings.aoSlow;
     document.getElementById('stake-input').value    = appSettings.stake;
     document.getElementById('dur-value').value      = appSettings.durValue;
     applyDurTypeUI(appSettings.durType);
@@ -1000,6 +1013,7 @@ function applyRestoredIndicatorVisibility(){
     chart.setDatasetVisibility(6, showMA);
     chart.setDatasetVisibility(7, showCEL);
     chart.setDatasetVisibility(8, showCEL);
+    chart.setDatasetVisibility(9, showAO);
     chart.update('none');
 
     document.getElementById('btn-sar').classList.toggle('active', showSAR);
@@ -1017,6 +1031,9 @@ function applyRestoredIndicatorVisibility(){
 
     document.getElementById('btn-cel').classList.toggle('active', showCEL);
     document.getElementById('param-cel').style.display = showCEL ? '' : 'none';
+
+    document.getElementById('btn-ao').classList.toggle('active', showAO);
+    document.getElementById('param-ao').style.display = showAO ? '' : 'none';
 
     document.getElementById('btn-levels').classList.toggle('active', showLevels);
     const d = showLevels ? '' : 'none';
@@ -1041,6 +1058,9 @@ function resetIndicatorParams(which){
         document.getElementById('cel-period').value = DEFAULT_SETTINGS.celPeriod;
         document.getElementById('cel-mult').value    = DEFAULT_SETTINGS.celMult;
         rebuildCELFromHistory();
+    } else if(which==='ao'){
+        document.getElementById('ao-fast').value = DEFAULT_SETTINGS.aoFast;
+        document.getElementById('ao-slow').value = DEFAULT_SETTINGS.aoSlow;
     }
     onParamsChanged();
     showFeedback('↺ Paramètres '+which.toUpperCase()+' réinitialisés par défaut','pend');
@@ -1510,7 +1530,14 @@ function initChart(){
                 {label:'ST Bear',data:[],borderColor:'#ff4d6a',borderWidth:2.5,pointRadius:0,showLine:true,hidden:!showST,tension:0,order:3},
                 {label:'MA',data:[],borderColor:'#4dd0e1',borderWidth:1.8,pointRadius:0,showLine:true,hidden:!showMA,tension:0.08,order:2},
                 {label:'CE Long',data:[],borderColor:'#2dd4bf',borderWidth:2,borderDash:[5,3],pointRadius:0,showLine:true,hidden:!showCEL,tension:0,order:3},
-                {label:'CE Short',data:[],borderColor:'#f472b6',borderWidth:2,borderDash:[5,3],pointRadius:0,showLine:true,hidden:!showCEL,tension:0,order:3}
+                {label:'CE Short',data:[],borderColor:'#f472b6',borderWidth:2,borderDash:[5,3],pointRadius:0,showLine:true,hidden:!showCEL,tension:0,order:3},
+                {label:'AO',type:'bar',data:[],yAxisID:'yAO',borderWidth:0,barPercentage:0.9,categoryPercentage:1,hidden:!showAO,order:5,
+                    backgroundColor:(ctx)=>{
+                        const arr=ctx.chart.data.datasets[9].data, i=ctx.dataIndex;
+                        const v=arr[i], prev=i>0?arr[i-1]:null;
+                        if(v==null) return 'rgba(0,0,0,0)';
+                        return (prev==null||v>=prev) ? 'rgba(0,200,150,.85)' : 'rgba(255,77,106,.85)';
+                    }}
             ]
         },
         options:{
@@ -1519,7 +1546,8 @@ function initChart(){
             layout:{padding:{right:72,top:28,bottom:28}},
             scales:{
                 x:{grid:{color:'rgba(37,42,58,.9)'},ticks:{color:'#5a6480',maxTicksLimit:10,font:{family:'JetBrains Mono',size:10}},border:{color:'#252a3a'}},
-                y:{position:'right',display:false,grace:'5%',grid:{color:'rgba(37,42,58,.9)'},ticks:{color:'#5a6480',font:{family:'JetBrains Mono',size:10},callback:v=>fmt1(v)},border:{color:'#252a3a'}}
+                y:{position:'right',display:false,grace:'5%',grid:{color:'rgba(37,42,58,.9)'},ticks:{color:'#5a6480',font:{family:'JetBrains Mono',size:10},callback:v=>fmt1(v)},border:{color:'#252a3a'}},
+                yAO:{position:'left',display:false,grid:{display:false},ticks:{display:false}}
             },
             plugins:{
                 legend:{display:false},tooltip:{enabled:false},
@@ -1934,6 +1962,10 @@ function updateChartData(forceEnd=false){
     const stResult = { bull: stBullArr, bear: stBearArr };
     const maValsW = maType==='ema' ? calculateEMA(wPrices,maPeriod) : calculateSMA(wPrices,maPeriod);
     const maVals = padNull(maValsW);
+    const aoFast = parseInt(document.getElementById('ao-fast').value)||5;
+    const aoSlow = parseInt(document.getElementById('ao-slow').value)||34;
+    const aoValsW = calculateAO(wPrices,aoFast,aoSlow);
+    const aoVals = padNull(aoValsW);
     chart.data.labels=[...ticksData.times,...Array(RIGHT_PAD).fill('')];
     chart.data.datasets[0].data=ticksData.prices;
     chart.data.datasets[1].data=sarVals;
@@ -1944,6 +1976,17 @@ function updateChartData(forceEnd=false){
     chart.data.datasets[6].data=maVals;
     chart.data.datasets[7].data=celLongArr;
     chart.data.datasets[8].data=celShortArr;
+    chart.data.datasets[9].data=aoVals;
+    if(showAO){
+        /* Compresse les barres AO dans le tiers inférieur du graphique,
+           comme une bande d'oscillateur sous le prix, sans créer de
+           panneau séparé (canvas unique). */
+        const visible = aoVals.filter(v=>v!=null);
+        const maxAbs = visible.length ? Math.max(...visible.map(Math.abs)) : 1;
+        const m = maxAbs || 1;
+        chart.options.scales.yAO.min = -m*4;
+        chart.options.scales.yAO.max = m*1.15;
+    }
     chart.update('none');
     updateStreak(ticksData.prices,stResult);
     if(forceEnd)scrollToEnd();
@@ -1979,6 +2022,17 @@ function calculateEMA(prices,period){
     for(let i=period;i<n;i++){
         ema = prices[i]*k + ema*(1-k);
         out[i]=ema;
+    }
+    return out;
+}
+
+function calculateAO(prices,fast,slow){
+    const smaFast=calculateSMA(prices,fast);
+    const smaSlow=calculateSMA(prices,slow);
+    const n=prices.length;
+    const out=new Array(n).fill(null);
+    for(let i=0;i<n;i++){
+        if(smaFast[i]!=null && smaSlow[i]!=null) out[i]=smaFast[i]-smaSlow[i];
     }
     return out;
 }
@@ -2112,6 +2166,7 @@ function toggleIndicator(type){
     else if(type==='st'){showST=!showST;chart.setDatasetVisibility(4,showST);chart.setDatasetVisibility(5,showST);document.getElementById('btn-st').classList.toggle('active',showST);document.getElementById('param-st').style.display=showST?'':'none';}
     else if(type==='ma'){showMA=!showMA;chart.setDatasetVisibility(6,showMA);document.getElementById('btn-ma').classList.toggle('active',showMA);document.getElementById('param-ma').style.display=showMA?'':'none';}
     else if(type==='cel'){showCEL=!showCEL;chart.setDatasetVisibility(7,showCEL);chart.setDatasetVisibility(8,showCEL);document.getElementById('btn-cel').classList.toggle('active',showCEL);document.getElementById('param-cel').style.display=showCEL?'':'none';}
+    else if(type==='ao'){showAO=!showAO;chart.setDatasetVisibility(9,showAO);document.getElementById('btn-ao').classList.toggle('active',showAO);document.getElementById('param-ao').style.display=showAO?'':'none';if(showAO)updateChartData(false);}
     chart.update('none');
     syncSettingsFromInputs();
 }
@@ -2791,6 +2846,7 @@ window.onload = async () => {
     showST      = appSettings.showST;
     showMA      = appSettings.showMA;
     showCEL     = appSettings.showCEL;
+    showAO      = appSettings.showAO;
     showLevels  = appSettings.showLevels;
     initChart();
     applyRestoredInputs();
