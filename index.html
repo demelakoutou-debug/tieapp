@@ -1574,7 +1574,7 @@ function initChart(){
             },
             plugins:{
                 legend:{display:false},tooltip:{enabled:false},
-                zoom:{pan:{enabled:true,mode:'x',threshold:5,onPanComplete:()=>{updateAOScale();chart.update('none');}},zoom:{wheel:{enabled:true,speed:0.07},pinch:{enabled:true},mode:'x',onZoomComplete:()=>{updateAOScale();chart.update('none');}}},
+                zoom:{pan:{enabled:true,mode:'x',threshold:5},zoom:{wheel:{enabled:true,speed:0.07},pinch:{enabled:true},mode:'x'}},
                 annotation:{ annotations:{} }
             }
         }
@@ -1987,11 +1987,17 @@ function updateChartData(forceEnd=false){
     const maVals = padNull(maValsW);
     const aoFast = parseInt(document.getElementById('ao-fast').value)||5;
     const aoSlow = parseInt(document.getElementById('ao-slow').value)||34;
-    /* AO calculé sur TOUT l'historique reçu de Deriv (ticksData.prices,
-       jusqu'à 6000 ticks) — plus de fenêtre tronquée à INDICATOR_WINDOW.
-       Le calcul (deux SMA) reste O(n) donc négligeable à chaque tick, et
-       ça garantit que l'AO couvre le graphique jusqu'au tout premier
-       tick reçu, sans zone vide au début. */
+    /* IMPORTANT : contrairement à SAR/Fractal/MA, l'AO est calculé sur
+       ticksData.prices EN ENTIER (pas sur la fenêtre glissante wPrices/
+       INDICATOR_WINDOW). Une SMA n'a besoin que des `period` valeurs
+       précédentes, donc son calcul est déterministe et stable dès que
+       ces valeurs sont disponibles — recalculer sur tout l'historique
+       ne coûte presque rien (deux SMA en O(n)) et garantit deux choses :
+       1) l'AO couvre tous les ticks reçus depuis le tout début, sans
+          zone vide à gauche ni décalage par rapport au prix ;
+       2) les barres déjà affichées ne changent jamais de valeur/couleur
+          au fil du temps, contrairement à un calcul sur fenêtre glissante
+          où le début de la fenêtre bougeait à chaque tick. */
     const aoVals = calculateAO(ticksData.prices,aoFast,aoSlow);
     chart.data.labels=[...ticksData.times,...Array(RIGHT_PAD).fill('')];
     chart.data.datasets[0].data=ticksData.prices;
@@ -2004,7 +2010,16 @@ function updateChartData(forceEnd=false){
     chart.data.datasets[7].data=celLongArr;
     chart.data.datasets[8].data=celShortArr;
     chart.data.datasets[9].data=aoVals;
-    if(showAO) updateAOScale();
+    if(showAO){
+        /* Confine les barres AO exactement dans la bande OSC_ZONE_FRACTION
+           en bas du graphique, délimitée par la ligne barrière. */
+        const visible = aoVals.filter(v=>v!=null);
+        const maxAbs = visible.length ? Math.max(...visible.map(Math.abs)) : 1;
+        const m = (maxAbs || 1) * 1.1; // marge 10%
+        const totalSpan = (2*m) / OSC_ZONE_FRACTION;
+        chart.options.scales.yAO.min = -m;
+        chart.options.scales.yAO.max = -m + totalSpan;
+    }
     chart.update('none');
     updateStreak(ticksData.prices,stResult);
     if(forceEnd)scrollToEnd();
@@ -2012,40 +2027,6 @@ function updateChartData(forceEnd=false){
     if(showFractal)drawPeakLabels();
     updateOscBarrier();
     if(trendlines.length)renderTrendlines();
-}
-
-/* ════════════════════════════════════════════
-   ÉCHELLE DYNAMIQUE DE L'AWESOME OSCILLATOR (AO)
-   ─────────────────────────────────────────
-   Se recale sur la portion de ticks ACTUELLEMENT VISIBLE à l'écran
-   (chart.scales.x.min → max), et non sur tout l'historique chargé.
-   Avant : l'échelle utilisait le max absolu de TOUTE la série, donc à
-   chaque nouveau tick — ou dès qu'un ancien pic hors champ entrait dans
-   la fenêtre calculée — les barres visibles se redimensionnaient
-   brutalement (impression de "décalage"/saut de logique). Désormais
-   l'échelle reste stable tant que la zone visible ne change pas, et se
-   met à jour proprement au zoom/pan (voir onZoomComplete/onPanComplete
-   dans initChart, et le rafraîchissement périodique en bas de fichier).
-════════════════════════════════════════════ */
-function updateAOScale(){
-    if(!chart) return;
-    const aoData = chart.data.datasets[9].data;
-    if(!aoData || !aoData.length) return;
-    const xs = chart.scales.x;
-    let lo = 0, hi = aoData.length - 1;
-    if(xs && xs.min!=null && xs.max!=null){
-        lo = Math.max(0, Math.floor(xs.min));
-        hi = Math.min(aoData.length - 1, Math.ceil(xs.max));
-    }
-    let maxAbs = 0;
-    for(let i=lo;i<=hi;i++){
-        const v = aoData[i];
-        if(v!=null){ const a=Math.abs(v); if(a>maxAbs) maxAbs=a; }
-    }
-    const m = (maxAbs || 1) * 1.1; // marge 10%
-    const totalSpan = (2*m) / OSC_ZONE_FRACTION;
-    chart.options.scales.yAO.min = -m;
-    chart.options.scales.yAO.max = -m + totalSpan;
 }
 
 /* ════════════════════════════════════════════
@@ -2243,7 +2224,7 @@ function toggleIndicator(type){
     else if(type==='st'){showST=!showST;chart.setDatasetVisibility(4,showST);chart.setDatasetVisibility(5,showST);document.getElementById('btn-st').classList.toggle('active',showST);document.getElementById('param-st').style.display=showST?'':'none';}
     else if(type==='ma'){showMA=!showMA;chart.setDatasetVisibility(6,showMA);document.getElementById('btn-ma').classList.toggle('active',showMA);document.getElementById('param-ma').style.display=showMA?'':'none';}
     else if(type==='cel'){showCEL=!showCEL;chart.setDatasetVisibility(7,showCEL);chart.setDatasetVisibility(8,showCEL);document.getElementById('btn-cel').classList.toggle('active',showCEL);document.getElementById('param-cel').style.display=showCEL?'':'none';}
-    else if(type==='ao'){showAO=!showAO;chart.setDatasetVisibility(9,showAO);document.getElementById('btn-ao').classList.toggle('active',showAO);document.getElementById('param-ao').style.display=showAO?'':'none';if(showAO){updateAOScale();updateChartData(false);}updateOscBarrier();}
+    else if(type==='ao'){showAO=!showAO;chart.setDatasetVisibility(9,showAO);document.getElementById('btn-ao').classList.toggle('active',showAO);document.getElementById('param-ao').style.display=showAO?'':'none';updateChartData(false);updateOscBarrier();}
     chart.update('none');
     syncSettingsFromInputs();
 }
@@ -2267,7 +2248,6 @@ function resetZoom(){
     if(!chart)return;
     chart.scales.y.options.min=undefined;chart.scales.y.options.max=undefined;
     chart.resetZoom();scrollToEnd(true);
-    if(showAO){updateAOScale();chart.update('none');}
 }
 function scrollToEnd(force){
     /* Respecte le toggle Auto-scroll, sauf action manuelle explicite
@@ -2276,7 +2256,6 @@ function scrollToEnd(force){
     if(!chart||!ticksData.times.length)return;
     const total=ticksData.times.length;
     chart.zoomScale('x',{min:Math.max(0,total-VIEW_WINDOW),max:total+RIGHT_PAD-1},'default');
-    if(showAO){updateAOScale();chart.update('none');}
     setTimeout(()=>{updatePriceLines();drawPeakLabels();updateOscBarrier();},60);
 }
 function toggleAutoScroll(){
@@ -2288,7 +2267,7 @@ function toggleAutoScroll(){
 }
 function onParamsChanged(){updateChartData(false);syncSettingsFromInputs();}
 let lTimer=null;
-function debounceLines(){clearTimeout(lTimer);lTimer=setTimeout(()=>{updatePriceLines();drawPeakLabels();updateOscBarrier();if(showAO&&chart){updateAOScale();chart.update('none');}},50);}
+function debounceLines(){clearTimeout(lTimer);lTimer=setTimeout(()=>{updatePriceLines();drawPeakLabels();updateOscBarrier();},50);}
 window.addEventListener('wheel',debounceLines,{passive:true});
 
 /* ════════════════════════════════════════════
@@ -3013,12 +2992,7 @@ window.onload = async () => {
     }
 
     setInterval(()=>{
-        if(ticksData.prices.length){
-            if(showLevels)updatePriceLines();
-            if(showFractal)drawPeakLabels();
-            updateOscBarrier();
-            if(showAO){updateAOScale();chart.update('none');}
-        }
+        if(ticksData.prices.length){if(showLevels)updatePriceLines();if(showFractal)drawPeakLabels();updateOscBarrier();}
     },400);
 };
 </script>
