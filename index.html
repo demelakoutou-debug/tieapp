@@ -906,6 +906,8 @@ function celStepNewTick(price){
 
 let ticksData = { times:[], prices:[], highs:[], lows:[] };
 let showSAR=true, showFractal=true, showLevels=true, showST=true, showMA=false, showCEL=false, showAO=false;
+let yManualScale = false;      // true dès que l'utilisateur a dragué l'axe Y manuellement
+let yAxisAutoReserved = false; // true si options.scales.y.min a été fixé par la réservation auto (pas par l'utilisateur)
 let autoScrollEnabled=true;
 let sessionHigh=null, sessionLow=null;
 let lastFractalPeaks = { up:[], down:[] };
@@ -1594,6 +1596,7 @@ function initChart(){
 let yDrag={active:false,startY:0,startMin:0,startMax:0,range:0};
 document.getElementById('y-drag-zone').addEventListener('mousedown',e=>{
     if(!chart||!ticksData.prices.length)return;
+    yManualScale = true;
     const ys=chart.scales.y;
     yDrag={active:true,startY:e.clientY,startMin:ys.min,startMax:ys.max,range:ys.max-ys.min};
     document.getElementById('y-drag-zone').classList.add('dragging');
@@ -2000,6 +2003,19 @@ function updateChartData(forceEnd=false){
     chart.data.datasets[7].data=celLongArr;
     chart.data.datasets[8].data=celShortArr;
     chart.data.datasets[9].data=aoVals;
+    /* ── MUR entre le prix/indicateurs superposés et la bande AO ──
+       On "clip" (découpe) le rendu des datasets 0 à 8 (prix, SAR,
+       Fractal, ST, MA, CE) pour qu'ils ne puissent JAMAIS être dessinés
+       dans les OSC_ZONE_FRACTION pixels du bas de la zone de tracé —
+       même si la valeur de prix descend très bas. C'est un mur physique
+       de rendu, pas seulement une ligne repère. */
+    if(chart.chartArea){
+        const caHeight = chart.chartArea.bottom - chart.chartArea.top;
+        const clipBottom = showAO ? caHeight * OSC_ZONE_FRACTION : 0;
+        for(let i=0;i<=8;i++){
+            chart.data.datasets[i].clip = {left:0,top:0,right:0,bottom:clipBottom};
+        }
+    }
     if(showAO){
         /* Confine les barres AO exactement dans la bande OSC_ZONE_FRACTION
            en bas du graphique, délimitée par la ligne barrière — la
@@ -2011,6 +2027,25 @@ function updateChartData(forceEnd=false){
         const totalSpan = (2*m) / OSC_ZONE_FRACTION;
         chart.options.scales.yAO.min = -m;
         chart.options.scales.yAO.max = -m + totalSpan;
+    }
+    /* MUR — réserve le bas de l'axe des prix (yAO) pour que les ticks
+       de prix ne puissent jamais visuellement rentrer dans la zone
+       oscillateurs. Calculé à partir de sessionHigh/sessionLow (extent
+       réel des prix, indépendant du rendu précédent) pour éviter toute
+       dérive en boucle d'une frame à l'autre. Désactivé si l'utilisateur
+       a dragué l'axe Y manuellement. */
+    if(showAO && !yManualScale && !yDrag.active){
+        if(sessionLow!=null && sessionHigh!=null && sessionHigh>sessionLow){
+            const range = sessionHigh - sessionLow;
+            const grace = range * 0.05;
+            const effMin = sessionLow - grace, effMax = sessionHigh + grace;
+            const extra = (effMax - effMin) * (OSC_ZONE_FRACTION/(1-OSC_ZONE_FRACTION));
+            chart.options.scales.y.min = effMin - extra;
+            yAxisAutoReserved = true;
+        }
+    } else if(yAxisAutoReserved && !yManualScale){
+        chart.options.scales.y.min = undefined;
+        yAxisAutoReserved = false;
     }
     chart.update('none');
     updateStreak(ticksData.prices,stResult);
@@ -2216,7 +2251,7 @@ function toggleIndicator(type){
     else if(type==='st'){showST=!showST;chart.setDatasetVisibility(4,showST);chart.setDatasetVisibility(5,showST);document.getElementById('btn-st').classList.toggle('active',showST);document.getElementById('param-st').style.display=showST?'':'none';}
     else if(type==='ma'){showMA=!showMA;chart.setDatasetVisibility(6,showMA);document.getElementById('btn-ma').classList.toggle('active',showMA);document.getElementById('param-ma').style.display=showMA?'':'none';}
     else if(type==='cel'){showCEL=!showCEL;chart.setDatasetVisibility(7,showCEL);chart.setDatasetVisibility(8,showCEL);document.getElementById('btn-cel').classList.toggle('active',showCEL);document.getElementById('param-cel').style.display=showCEL?'':'none';}
-    else if(type==='ao'){showAO=!showAO;chart.setDatasetVisibility(9,showAO);document.getElementById('btn-ao').classList.toggle('active',showAO);document.getElementById('param-ao').style.display=showAO?'':'none';if(showAO)updateChartData(false);updateOscBarrier();}
+    else if(type==='ao'){showAO=!showAO;chart.setDatasetVisibility(9,showAO);document.getElementById('btn-ao').classList.toggle('active',showAO);document.getElementById('param-ao').style.display=showAO?'':'none';updateChartData(false);updateOscBarrier();}
     chart.update('none');
     syncSettingsFromInputs();
 }
@@ -2238,6 +2273,7 @@ function toggleLevels(){
 }
 function resetZoom(){
     if(!chart)return;
+    yManualScale = false;
     chart.scales.y.options.min=undefined;chart.scales.y.options.max=undefined;
     chart.resetZoom();scrollToEnd(true);
 }
