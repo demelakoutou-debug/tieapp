@@ -1987,8 +1987,18 @@ function updateChartData(forceEnd=false){
     const maVals = padNull(maValsW);
     const aoFast = parseInt(document.getElementById('ao-fast').value)||5;
     const aoSlow = parseInt(document.getElementById('ao-slow').value)||34;
-    const aoValsW = calculateAO(wPrices,aoFast,aoSlow);
-    const aoVals = padNull(aoValsW);
+    /* IMPORTANT : contrairement à SAR/Fractal/MA, l'AO est calculé sur
+       ticksData.prices EN ENTIER (pas sur la fenêtre glissante wPrices/
+       INDICATOR_WINDOW). Une SMA n'a besoin que des `period` valeurs
+       précédentes, donc son calcul est déterministe et stable dès que
+       ces valeurs sont disponibles — recalculer sur tout l'historique
+       ne coûte presque rien (deux SMA en O(n)) et garantit deux choses :
+       1) l'AO couvre tous les ticks reçus depuis le tout début, sans
+          zone vide à gauche ni décalage par rapport au prix ;
+       2) les barres déjà affichées ne changent jamais de valeur/couleur
+          au fil du temps, contrairement à un calcul sur fenêtre glissante
+          où le début de la fenêtre bougeait à chaque tick. */
+    const aoVals = calculateAO(ticksData.prices,aoFast,aoSlow);
     chart.data.labels=[...ticksData.times,...Array(RIGHT_PAD).fill('')];
     chart.data.datasets[0].data=ticksData.prices;
     chart.data.datasets[1].data=sarVals;
@@ -2002,9 +2012,7 @@ function updateChartData(forceEnd=false){
     chart.data.datasets[9].data=aoVals;
     if(showAO){
         /* Confine les barres AO exactement dans la bande OSC_ZONE_FRACTION
-           en bas du graphique, délimitée par la ligne barrière — la
-           courbe de prix (axe 'y', séparé) ne peut donc jamais s'y
-           mélanger visuellement. */
+           en bas du graphique, délimitée par la ligne barrière. */
         const visible = aoVals.filter(v=>v!=null);
         const maxAbs = visible.length ? Math.max(...visible.map(Math.abs)) : 1;
         const m = (maxAbs || 1) * 1.1; // marge 10%
@@ -2216,7 +2224,7 @@ function toggleIndicator(type){
     else if(type==='st'){showST=!showST;chart.setDatasetVisibility(4,showST);chart.setDatasetVisibility(5,showST);document.getElementById('btn-st').classList.toggle('active',showST);document.getElementById('param-st').style.display=showST?'':'none';}
     else if(type==='ma'){showMA=!showMA;chart.setDatasetVisibility(6,showMA);document.getElementById('btn-ma').classList.toggle('active',showMA);document.getElementById('param-ma').style.display=showMA?'':'none';}
     else if(type==='cel'){showCEL=!showCEL;chart.setDatasetVisibility(7,showCEL);chart.setDatasetVisibility(8,showCEL);document.getElementById('btn-cel').classList.toggle('active',showCEL);document.getElementById('param-cel').style.display=showCEL?'':'none';}
-    else if(type==='ao'){showAO=!showAO;chart.setDatasetVisibility(9,showAO);document.getElementById('btn-ao').classList.toggle('active',showAO);document.getElementById('param-ao').style.display=showAO?'':'none';if(showAO)updateChartData(false);updateOscBarrier();}
+    else if(type==='ao'){showAO=!showAO;chart.setDatasetVisibility(9,showAO);document.getElementById('btn-ao').classList.toggle('active',showAO);document.getElementById('param-ao').style.display=showAO?'':'none';updateChartData(false);updateOscBarrier();}
     chart.update('none');
     syncSettingsFromInputs();
 }
