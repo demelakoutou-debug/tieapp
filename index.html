@@ -1830,13 +1830,6 @@ function connectChartWS(){
     sessionHigh=null;sessionLow=null;
     _lastTickReceivedAt = Date.now(); // évite un reconnect immédiat par le watchdog
     wsChart=new WebSocket(CHART_WS_URL);
-    let historyReceived = false;
-    let historyRetryTimer = null;
-    const requestHistory = ()=>{
-        if(wsChart && wsChart.readyState===WebSocket.OPEN){
-            wsChart.send(JSON.stringify({ticks_history:currentSymbol,adjust_start_time:1,count:3000,end:'latest',start:1}));
-        }
-    };
     wsChart.onopen=()=>{
         setChartStatus(true);
         console.log('[Deriv WS] connexion ouverte — symbole:', currentSymbol);
@@ -1845,19 +1838,7 @@ function connectChartWS(){
            ("InvalidSymbol") pour les Step Index sur ce canal public. Le
            flux live passe désormais par subscribeTradingTicks() (canal
            authentifié) si connecté, ou par startPublicPolling() sinon. */
-        requestHistory();
-        /* Watchdog dédié à l'historique : sur un réseau instable (3G/H+),
-           la requête ticks_history peut se perdre sans que le socket ne
-           se ferme pour autant — dans ce cas le watchdog général (basé
-           sur les ticks live, toutes les 20s) ne réagit pas puisque le
-           socket reste "ouvert". On relance donc la demande toutes les
-           5s tant que l'historique n'est pas arrivé. */
-        if(historyRetryTimer) clearInterval(historyRetryTimer);
-        historyRetryTimer = setInterval(()=>{
-            if(historyReceived){ clearInterval(historyRetryTimer); historyRetryTimer=null; return; }
-            console.warn('[Deriv WS] Historique toujours pas reçu — nouvelle tentative…');
-            requestHistory();
-        }, 5000);
+        wsChart.send(JSON.stringify({ticks_history:currentSymbol,adjust_start_time:1,count:3000,end:'latest',start:1}));
         /* Heure serveur : requête initiale puis toutes les secondes */
         wsChart.send(JSON.stringify({time:1}));
         if(wsChart._timeTimer) clearInterval(wsChart._timeTimer);
@@ -1876,8 +1857,6 @@ function connectChartWS(){
         if(d.msg_type==='time' && d.time){
             updateServerTime(d.time);
         } else if(d.msg_type==='history'){
-            historyReceived = true;
-            if(historyRetryTimer){ clearInterval(historyRetryTimer); historyRetryTimer=null; }
             _lastTickReceivedAt = Date.now();
             processHistory(d.history);
         } else {
@@ -1886,7 +1865,6 @@ function connectChartWS(){
     };
     wsChart.onclose=(ev)=>{
         console.warn('[Deriv WS] connexion fermée, code:', ev?.code, 'reason:', ev?.reason);
-        if(historyRetryTimer){ clearInterval(historyRetryTimer); historyRetryTimer=null; }
         if(wsChart && wsChart._timeTimer) clearInterval(wsChart._timeTimer);
         setChartStatus(false);
         setTimeout(connectChartWS,4000);
