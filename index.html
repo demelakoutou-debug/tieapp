@@ -730,7 +730,12 @@
 /* ════════════════════════════════════════════
    GLOBALS
 ════════════════════════════════════════════ */
-const CHART_WS_URL = "wss://ws.derivws.com/websockets/v3?app_id=1089";
+/* Deriv a retiré ses anciens hôtes WebSocket legacy (ws.derivws.com,
+   ws.binaryws.com, blue.derivws.com) — tout handshake dessus renvoie
+   désormais une erreur HTTP 520. Les données publiques (historique,
+   ticks, heure serveur, active_symbols) sont maintenant servies sur ce
+   nouvel hôte, sans app_id requis. */
+const CHART_WS_URL = "wss://api.derivws.com/trading/v1/options/ws/public";
 let wsChart = null;
 let chart = null;
 let currentSymbol = "stpRNG5";
