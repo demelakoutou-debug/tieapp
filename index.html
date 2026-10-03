@@ -2318,7 +2318,7 @@ function placeTrade(dir){
     const durVal=parseInt(document.getElementById('dur-value').value);
     if(!durVal||durVal<1){showFeedback('⚠ Durée invalide','err');return;}
     if(durType==='s'&&durVal<15){showFeedback('⚠ Durée min 15 secondes','err');return;}
-    const isAllowEqual = allowEqual && durType==='t';
+    const isAllowEqual = allowEqual;
     let contractType;
     if(isAllowEqual){ contractType=(dir==='up')?'CALLE':'PUTE'; }
     else             { contractType=(dir==='up')?'CALL':'PUT';  }
@@ -2351,7 +2351,7 @@ function placeDoubleTrade(){
     const durVal=parseInt(document.getElementById('dur-value').value);
     if(!durVal||durVal<1){showFeedback('⚠ Durée invalide','err');return;}
     if(durType==='s'&&durVal<15){showFeedback('⚠ Durée min 15 sec','err');return;}
-    const isAllowEqual = allowEqual && durType==='t';
+    const isAllowEqual = allowEqual;
     const typeUp=isAllowEqual?'CALLE':'CALL';
     const typeDn=isAllowEqual?'PUTE':'PUT';
     const base={amount:stake,basis:'stake',currency:'USD',duration:durVal,duration_unit:durType,underlying_symbol:tradeSymbol()};
