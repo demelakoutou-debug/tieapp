@@ -748,9 +748,9 @@ const RIGHT_PAD = 30, VIEW_WINDOW = 180;
 const INDICATOR_WINDOW = 1500;
 /* Fraction de la hauteur du graphique réservée en bas pour les
    oscillateurs (AO, futur RSI, etc.). La ligne barrière pointillée est
-   dessinée à cette frontière, et l'axe yAO est recalculé pour que les
-   barres AO restent toujours confinées dans cette bande, quelle que
-   soit l'amplitude actuelle des valeurs. */
+   dessinée à cette frontière, et le plugin aoDrawPlugin dessine les
+   barres AO confinées dans cette bande, quelle que soit l'amplitude
+   actuelle des valeurs. */
 const OSC_ZONE_FRACTION = 0.28;
 
 /* ════════════════════════════════════════════
@@ -911,6 +911,7 @@ function celStepNewTick(price){
 
 let ticksData = { times:[], prices:[], highs:[], lows:[] };
 let showSAR=true, showFractal=true, showLevels=true, showST=true, showMA=false, showCEL=false, showAO=false;
+let lastAOVals = []; // dernières valeurs AO calculées (historique complet), pour recalculer l'échelle visible sans tout refaire
 let autoScrollEnabled=true;
 let sessionHigh=null, sessionLow=null;
 let lastFractalPeaks = { up:[], down:[] };
@@ -1040,7 +1041,6 @@ function applyRestoredIndicatorVisibility(){
     chart.setDatasetVisibility(6, showMA);
     chart.setDatasetVisibility(7, showCEL);
     chart.setDatasetVisibility(8, showCEL);
-    chart.setDatasetVisibility(9, showAO);
     chart.update('none');
 
     document.getElementById('btn-sar').classList.toggle('active', showSAR);
@@ -1541,6 +1541,71 @@ function setBtnConnect(cls,txt){
 
 
 /* ════════════════════════════════════════════
+   AO — DESSIN DIRECT SUR CANVAS
+   ─────────────────────────────────────────
+   Au lieu d'un dataset Chart.js de type 'bar' mélangé à des datasets
+   'line' sur une échelle catégorielle (source d'instabilité constatée :
+   bars qui ne couvrent pas tout l'historique, qui "redémarrent" après
+   un refresh, etc.), on dessine nous-mêmes les barres AO directement
+   sur le canvas via un plugin Chart.js (afterDatasetsDraw). On utilise
+   chart.scales.x.getPixelForValue(i) — exactement le même mapping pixel
+   que celui utilisé pour tracer le prix — donc l'alignement est garanti
+   pixel-perfect, pour N'IMPORTE QUEL index de lastAOVals (tout
+   l'historique), qu'on soit scrollé au début ou à la fin. Aucune
+   dépendance à un dataset/axe Chart.js séparé, donc aucun des bugs de
+   dataset "bar" rencontrés.
+════════════════════════════════════════════ */
+const aoDrawPlugin = {
+    id:'aoDrawPlugin',
+    afterDatasetsDraw(c){
+        if(!showAO || !lastAOVals.length) return;
+        const xs=c.scales.x, ca=c.chartArea;
+        if(!xs || !ca) return;
+        const bandTop = ca.top + (1-OSC_ZONE_FRACTION)*(ca.bottom-ca.top);
+        const bandBottom = ca.bottom;
+        const midY = bandTop + (bandBottom-bandTop)/2;
+        const halfH = (bandBottom-bandTop)/2;
+
+        /* Référence de normalisation : 98e percentile des valeurs
+           absolues sur TOUT l'historique (lastAOVals) — stable, ne
+           dépend ni du zoom ni du moment du calcul. Un pic rare et
+           ancien est plafonné (clampé) plutôt que d'écraser le reste. */
+        const abs=[];
+        for(let i=0;i<lastAOVals.length;i++){ const v=lastAOVals[i]; if(v!=null) abs.push(Math.abs(v)); }
+        if(!abs.length) return;
+        abs.sort((a,b)=>a-b);
+        const refAbs = abs[Math.min(abs.length-1, Math.floor(abs.length*0.98))] || abs[abs.length-1] || 0.01;
+
+        /* Largeur de barre = distance en pixels entre deux index
+           consécutifs sur l'échelle catégorielle (identique au pas du
+           prix), avec une petite marge pour l'espacement visuel. */
+        const stepPx = Math.abs(xs.getPixelForValue(1) - xs.getPixelForValue(0)) || 4;
+        const barW = Math.max(1, stepPx*0.7);
+
+        const startIdx = Math.max(0, Math.floor(xs.min!=null?xs.min:0));
+        const endIdx   = Math.min(lastAOVals.length-1, Math.ceil(xs.max!=null?xs.max:lastAOVals.length-1));
+
+        const ctx=c.ctx;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(ca.left, bandTop, ca.right-ca.left, bandBottom-bandTop);
+        ctx.clip();
+        for(let i=startIdx;i<=endIdx;i++){
+            const v=lastAOVals[i];
+            if(v==null) continue;
+            const x = xs.getPixelForValue(i);
+            const prev = i>0 ? lastAOVals[i-1] : null;
+            const rising = (prev==null) ? (v>=0) : (v>=prev);
+            ctx.fillStyle = rising ? 'rgba(0,200,150,.85)' : 'rgba(255,77,106,.85)';
+            const h = Math.min(halfH, (Math.abs(v)/refAbs)*halfH);
+            if(v>=0) ctx.fillRect(x-barW/2, midY-h, barW, h);
+            else     ctx.fillRect(x-barW/2, midY, barW, h);
+        }
+        ctx.restore();
+    }
+};
+
+/* ════════════════════════════════════════════
    CHART INIT
 ════════════════════════════════════════════ */
 function initChart(){
@@ -1558,14 +1623,7 @@ function initChart(){
                 {label:'ST Bear',data:[],borderColor:'#ff4d6a',borderWidth:2.5,pointRadius:0,showLine:true,hidden:!showST,tension:0,order:3},
                 {label:'MA',data:[],borderColor:'#4dd0e1',borderWidth:1.8,pointRadius:0,showLine:true,hidden:!showMA,tension:0.08,order:2},
                 {label:'CE Long',data:[],borderColor:'#2dd4bf',borderWidth:2,borderDash:[5,3],pointRadius:0,showLine:true,hidden:!showCEL,tension:0,order:3},
-                {label:'CE Short',data:[],borderColor:'#f472b6',borderWidth:2,borderDash:[5,3],pointRadius:0,showLine:true,hidden:!showCEL,tension:0,order:3},
-                {label:'AO',type:'bar',data:[],yAxisID:'yAO',borderWidth:0,barPercentage:0.9,categoryPercentage:1,hidden:!showAO,order:5,
-                    backgroundColor:(ctx)=>{
-                        const arr=ctx.chart.data.datasets[9].data, i=ctx.dataIndex;
-                        const v=arr[i], prev=i>0?arr[i-1]:null;
-                        if(v==null) return 'rgba(0,0,0,0)';
-                        return (prev==null||v>=prev) ? 'rgba(0,200,150,.85)' : 'rgba(255,77,106,.85)';
-                    }}
+                {label:'CE Short',data:[],borderColor:'#f472b6',borderWidth:2,borderDash:[5,3],pointRadius:0,showLine:true,hidden:!showCEL,tension:0,order:3}
             ]
         },
         options:{
@@ -1574,15 +1632,15 @@ function initChart(){
             layout:{padding:{right:72,top:28,bottom:28}},
             scales:{
                 x:{grid:{color:'rgba(37,42,58,.9)'},ticks:{color:'#5a6480',maxTicksLimit:10,font:{family:'JetBrains Mono',size:10}},border:{color:'#252a3a'}},
-                y:{position:'right',display:false,grace:'5%',grid:{color:'rgba(37,42,58,.9)'},ticks:{color:'#5a6480',font:{family:'JetBrains Mono',size:10},callback:v=>fmt1(v)},border:{color:'#252a3a'}},
-                yAO:{position:'left',display:false,grid:{display:false},ticks:{display:false}}
+                y:{position:'right',display:false,grace:'5%',grid:{color:'rgba(37,42,58,.9)'},ticks:{color:'#5a6480',font:{family:'JetBrains Mono',size:10},callback:v=>fmt1(v)},border:{color:'#252a3a'}}
             },
             plugins:{
                 legend:{display:false},tooltip:{enabled:false},
                 zoom:{pan:{enabled:true,mode:'x',threshold:5},zoom:{wheel:{enabled:true,speed:0.07},pinch:{enabled:true},mode:'x'}},
                 annotation:{ annotations:{} }
             }
-        }
+        },
+        plugins:[aoDrawPlugin]
     });
     const gradCtx=document.getElementById('cryptoChart').getContext('2d');
     const gradient=gradCtx.createLinearGradient(0,0,0,400);
@@ -2014,17 +2072,7 @@ function updateChartData(forceEnd=false){
     chart.data.datasets[6].data=maVals;
     chart.data.datasets[7].data=celLongArr;
     chart.data.datasets[8].data=celShortArr;
-    chart.data.datasets[9].data=aoVals;
-    if(showAO){
-        /* Confine les barres AO exactement dans la bande OSC_ZONE_FRACTION
-           en bas du graphique, délimitée par la ligne barrière. */
-        const visible = aoVals.filter(v=>v!=null);
-        const maxAbs = visible.length ? Math.max(...visible.map(Math.abs)) : 1;
-        const m = (maxAbs || 1) * 1.1; // marge 10%
-        const totalSpan = (2*m) / OSC_ZONE_FRACTION;
-        chart.options.scales.yAO.min = -m;
-        chart.options.scales.yAO.max = -m + totalSpan;
-    }
+    lastAOVals = aoVals;
     chart.update('none');
     updateStreak(ticksData.prices,stResult);
     if(forceEnd)scrollToEnd();
@@ -2229,7 +2277,7 @@ function toggleIndicator(type){
     else if(type==='st'){showST=!showST;chart.setDatasetVisibility(4,showST);chart.setDatasetVisibility(5,showST);document.getElementById('btn-st').classList.toggle('active',showST);document.getElementById('param-st').style.display=showST?'':'none';}
     else if(type==='ma'){showMA=!showMA;chart.setDatasetVisibility(6,showMA);document.getElementById('btn-ma').classList.toggle('active',showMA);document.getElementById('param-ma').style.display=showMA?'':'none';}
     else if(type==='cel'){showCEL=!showCEL;chart.setDatasetVisibility(7,showCEL);chart.setDatasetVisibility(8,showCEL);document.getElementById('btn-cel').classList.toggle('active',showCEL);document.getElementById('param-cel').style.display=showCEL?'':'none';}
-    else if(type==='ao'){showAO=!showAO;chart.setDatasetVisibility(9,showAO);document.getElementById('btn-ao').classList.toggle('active',showAO);document.getElementById('param-ao').style.display=showAO?'':'none';updateChartData(false);updateOscBarrier();}
+    else if(type==='ao'){showAO=!showAO;document.getElementById('btn-ao').classList.toggle('active',showAO);document.getElementById('param-ao').style.display=showAO?'':'none';updateChartData(false);updateOscBarrier();}
     chart.update('none');
     syncSettingsFromInputs();
 }
@@ -2836,6 +2884,7 @@ document.getElementById('market-select').addEventListener('change',e=>{
     ['stat-high','stat-low'].forEach(id=>document.getElementById(id).innerText='—');
     document.getElementById('last-price').innerText='—';
     if(chart){chart.data.labels=[];chart.data.datasets.forEach(d=>d.data=[]);chart.update('none');}
+    lastAOVals = [];
     clearPeakLabels();
     mkHistory.length=0; mkPrices.length=0;
     Object.keys(mkTransitions).forEach(k=>delete mkTransitions[k]);
