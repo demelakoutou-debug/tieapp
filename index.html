@@ -911,7 +911,6 @@ function celStepNewTick(price){
 
 let ticksData = { times:[], prices:[], highs:[], lows:[] };
 let showSAR=true, showFractal=true, showLevels=true, showST=true, showMA=false, showCEL=false, showAO=false;
-let lastAOVals = []; // dernières valeurs AO calculées (historique complet), pour recalculer l'échelle visible sans tout refaire
 let autoScrollEnabled=true;
 let sessionHigh=null, sessionLow=null;
 let lastFractalPeaks = { up:[], down:[] };
@@ -2016,8 +2015,16 @@ function updateChartData(forceEnd=false){
     chart.data.datasets[7].data=celLongArr;
     chart.data.datasets[8].data=celShortArr;
     chart.data.datasets[9].data=aoVals;
-    lastAOVals = aoVals;
-    if(showAO) recalcAOScale();
+    if(showAO){
+        /* Confine les barres AO exactement dans la bande OSC_ZONE_FRACTION
+           en bas du graphique, délimitée par la ligne barrière. */
+        const visible = aoVals.filter(v=>v!=null);
+        const maxAbs = visible.length ? Math.max(...visible.map(Math.abs)) : 1;
+        const m = (maxAbs || 1) * 1.1; // marge 10%
+        const totalSpan = (2*m) / OSC_ZONE_FRACTION;
+        chart.options.scales.yAO.min = -m;
+        chart.options.scales.yAO.max = -m + totalSpan;
+    }
     chart.update('none');
     updateStreak(ticksData.prices,stResult);
     if(forceEnd)scrollToEnd();
@@ -2122,47 +2129,6 @@ function drawPeakLabels(){
 }
 function clearPeakLabels(){
     document.getElementById('chart-labels').querySelectorAll('.peak-label').forEach(e=>e.remove());
-}
-
-/* ════════════════════════════════════════════
-   ÉCHELLE AO — basée sur la fenêtre VISIBLE,
-   pas sur tout l'historique.
-   ─────────────────────────────────────────
-   calculateAO() tourne sur les 3000+ ticks entiers (valeurs stables,
-   présentes dès le début). Mais normaliser l'axe yAO sur le maximum
-   absolu de TOUT l'historique écrase les barres récentes en quasi
-   invisible dès qu'un pic est survenu plus tôt — ça donnait l'impression
-   que l'AO "disparaissait" ou "redémarrait". On calcule donc le maximum
-   uniquement sur la plage actuellement affichée (chart.scales.x), pour
-   que les barres restent toujours visibles et proportionnées à ce qui
-   est réellement à l'écran, sans jamais toucher aux valeurs elles-mêmes.
-════════════════════════════════════════════ */
-function recalcAOScale(){
-    if(!chart || !showAO || !lastAOVals.length) return;
-    /* Calcul PUREMENT basé sur les données de tout l'historique — aucune
-       dépendance au zoom/scroll/état du canvas, donc toujours identique
-       et correct, qu'on vienne de rafraîchir la page ou non. On utilise
-       le 98e percentile des valeurs absolues plutôt que le maximum brut :
-       un pic rare et ancien est ainsi plafonné visuellement au lieu
-       d'écraser toutes les barres récentes (plus petites) en quasi
-       invisible. */
-    const abs = [];
-    for(let i=0;i<lastAOVals.length;i++){
-        const v=lastAOVals[i];
-        if(v!=null) abs.push(Math.abs(v));
-    }
-    let ref;
-    if(!abs.length){
-        ref = 0.01;
-    } else {
-        abs.sort((a,b)=>a-b);
-        const idx = Math.min(abs.length-1, Math.floor(abs.length*0.98));
-        ref = abs[idx] || abs[abs.length-1] || 0.01;
-    }
-    const m = ref * 1.1; // marge 10%
-    const totalSpan = (2*m) / OSC_ZONE_FRACTION;
-    chart.options.scales.yAO.min = -m;
-    chart.options.scales.yAO.max = -m + totalSpan;
 }
 
 /* ════════════════════════════════════════════
