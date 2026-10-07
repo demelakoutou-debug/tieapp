@@ -1580,7 +1580,7 @@ function initChart(){
             },
             plugins:{
                 legend:{display:false},tooltip:{enabled:false},
-                zoom:{pan:{enabled:true,mode:'x',threshold:5,onPanComplete:()=>refreshAOScaleAndRender()},zoom:{wheel:{enabled:true,speed:0.07},pinch:{enabled:true},mode:'x',onZoomComplete:()=>refreshAOScaleAndRender()}},
+                zoom:{pan:{enabled:true,mode:'x',threshold:5},zoom:{wheel:{enabled:true,speed:0.07},pinch:{enabled:true},mode:'x'}},
                 annotation:{ annotations:{} }
             }
         }
@@ -2137,28 +2137,29 @@ function clearPeakLabels(){
    que les barres restent toujours visibles et proportionnées à ce qui
    est réellement à l'écran, sans jamais toucher aux valeurs elles-mêmes.
 ════════════════════════════════════════════ */
-function refreshAOScaleAndRender(){
-    if(!chart || !showAO) return;
-    recalcAOScale();
-    chart.update('none');
-}
 function recalcAOScale(){
     if(!chart || !showAO || !lastAOVals.length) return;
-    const xs = chart.scales.x;
-    let startIdx, endIdx;
-    if(xs && xs.min!=null && xs.max!=null){
-        startIdx = Math.max(0, Math.floor(xs.min));
-        endIdx   = Math.min(lastAOVals.length-1, Math.ceil(xs.max));
-    } else {
-        startIdx = Math.max(0, lastAOVals.length - VIEW_WINDOW - RIGHT_PAD);
-        endIdx   = lastAOVals.length-1;
-    }
-    let maxAbs = 0;
-    for(let i=startIdx;i<=endIdx;i++){
+    /* Calcul PUREMENT basé sur les données de tout l'historique — aucune
+       dépendance au zoom/scroll/état du canvas, donc toujours identique
+       et correct, qu'on vienne de rafraîchir la page ou non. On utilise
+       le 98e percentile des valeurs absolues plutôt que le maximum brut :
+       un pic rare et ancien est ainsi plafonné visuellement au lieu
+       d'écraser toutes les barres récentes (plus petites) en quasi
+       invisible. */
+    const abs = [];
+    for(let i=0;i<lastAOVals.length;i++){
         const v=lastAOVals[i];
-        if(v!=null){ const a=Math.abs(v); if(a>maxAbs) maxAbs=a; }
+        if(v!=null) abs.push(Math.abs(v));
     }
-    const m = (maxAbs || 0.01) * 1.1; // marge 10%, jamais 0 pour éviter une division par zéro
+    let ref;
+    if(!abs.length){
+        ref = 0.01;
+    } else {
+        abs.sort((a,b)=>a-b);
+        const idx = Math.min(abs.length-1, Math.floor(abs.length*0.98));
+        ref = abs[idx] || abs[abs.length-1] || 0.01;
+    }
+    const m = ref * 1.1; // marge 10%
     const totalSpan = (2*m) / OSC_ZONE_FRACTION;
     chart.options.scales.yAO.min = -m;
     chart.options.scales.yAO.max = -m + totalSpan;
@@ -2294,7 +2295,7 @@ function scrollToEnd(force){
     if(!chart||!ticksData.times.length)return;
     const total=ticksData.times.length;
     chart.zoomScale('x',{min:Math.max(0,total-VIEW_WINDOW),max:total+RIGHT_PAD-1},'default');
-    setTimeout(()=>{updatePriceLines();drawPeakLabels();updateOscBarrier();refreshAOScaleAndRender();},60);
+    setTimeout(()=>{updatePriceLines();drawPeakLabels();updateOscBarrier();},60);
 }
 function toggleAutoScroll(){
     autoScrollEnabled = !autoScrollEnabled;
