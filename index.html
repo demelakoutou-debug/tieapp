@@ -911,6 +911,7 @@ function celStepNewTick(price){
 
 let ticksData = { times:[], prices:[], highs:[], lows:[] };
 let showSAR=true, showFractal=true, showLevels=true, showST=true, showMA=false, showCEL=false, showAO=false;
+let lastAOVals = []; // dernières valeurs AO calculées (historique complet), pour recalculer l'échelle visible sans tout refaire
 let autoScrollEnabled=true;
 let sessionHigh=null, sessionLow=null;
 let lastFractalPeaks = { up:[], down:[] };
@@ -1579,7 +1580,7 @@ function initChart(){
             },
             plugins:{
                 legend:{display:false},tooltip:{enabled:false},
-                zoom:{pan:{enabled:true,mode:'x',threshold:5},zoom:{wheel:{enabled:true,speed:0.07},pinch:{enabled:true},mode:'x'}},
+                zoom:{pan:{enabled:true,mode:'x',threshold:5,onPanComplete:()=>refreshAOScaleAndRender()},zoom:{wheel:{enabled:true,speed:0.07},pinch:{enabled:true},mode:'x',onZoomComplete:()=>refreshAOScaleAndRender()}},
                 annotation:{ annotations:{} }
             }
         }
@@ -2015,16 +2016,8 @@ function updateChartData(forceEnd=false){
     chart.data.datasets[7].data=celLongArr;
     chart.data.datasets[8].data=celShortArr;
     chart.data.datasets[9].data=aoVals;
-    if(showAO){
-        /* Confine les barres AO exactement dans la bande OSC_ZONE_FRACTION
-           en bas du graphique, délimitée par la ligne barrière. */
-        const visible = aoVals.filter(v=>v!=null);
-        const maxAbs = visible.length ? Math.max(...visible.map(Math.abs)) : 1;
-        const m = (maxAbs || 1) * 1.1; // marge 10%
-        const totalSpan = (2*m) / OSC_ZONE_FRACTION;
-        chart.options.scales.yAO.min = -m;
-        chart.options.scales.yAO.max = -m + totalSpan;
-    }
+    lastAOVals = aoVals;
+    if(showAO) recalcAOScale();
     chart.update('none');
     updateStreak(ticksData.prices,stResult);
     if(forceEnd)scrollToEnd();
@@ -2129,6 +2122,46 @@ function drawPeakLabels(){
 }
 function clearPeakLabels(){
     document.getElementById('chart-labels').querySelectorAll('.peak-label').forEach(e=>e.remove());
+}
+
+/* ════════════════════════════════════════════
+   ÉCHELLE AO — basée sur la fenêtre VISIBLE,
+   pas sur tout l'historique.
+   ─────────────────────────────────────────
+   calculateAO() tourne sur les 3000+ ticks entiers (valeurs stables,
+   présentes dès le début). Mais normaliser l'axe yAO sur le maximum
+   absolu de TOUT l'historique écrase les barres récentes en quasi
+   invisible dès qu'un pic est survenu plus tôt — ça donnait l'impression
+   que l'AO "disparaissait" ou "redémarrait". On calcule donc le maximum
+   uniquement sur la plage actuellement affichée (chart.scales.x), pour
+   que les barres restent toujours visibles et proportionnées à ce qui
+   est réellement à l'écran, sans jamais toucher aux valeurs elles-mêmes.
+════════════════════════════════════════════ */
+function refreshAOScaleAndRender(){
+    if(!chart || !showAO) return;
+    recalcAOScale();
+    chart.update('none');
+}
+function recalcAOScale(){
+    if(!chart || !showAO || !lastAOVals.length) return;
+    const xs = chart.scales.x;
+    let startIdx, endIdx;
+    if(xs && xs.min!=null && xs.max!=null){
+        startIdx = Math.max(0, Math.floor(xs.min));
+        endIdx   = Math.min(lastAOVals.length-1, Math.ceil(xs.max));
+    } else {
+        startIdx = Math.max(0, lastAOVals.length - VIEW_WINDOW - RIGHT_PAD);
+        endIdx   = lastAOVals.length-1;
+    }
+    let maxAbs = 0;
+    for(let i=startIdx;i<=endIdx;i++){
+        const v=lastAOVals[i];
+        if(v!=null){ const a=Math.abs(v); if(a>maxAbs) maxAbs=a; }
+    }
+    const m = (maxAbs || 0.01) * 1.1; // marge 10%, jamais 0 pour éviter une division par zéro
+    const totalSpan = (2*m) / OSC_ZONE_FRACTION;
+    chart.options.scales.yAO.min = -m;
+    chart.options.scales.yAO.max = -m + totalSpan;
 }
 
 /* ════════════════════════════════════════════
@@ -2261,7 +2294,7 @@ function scrollToEnd(force){
     if(!chart||!ticksData.times.length)return;
     const total=ticksData.times.length;
     chart.zoomScale('x',{min:Math.max(0,total-VIEW_WINDOW),max:total+RIGHT_PAD-1},'default');
-    setTimeout(()=>{updatePriceLines();drawPeakLabels();updateOscBarrier();},60);
+    setTimeout(()=>{updatePriceLines();drawPeakLabels();updateOscBarrier();refreshAOScaleAndRender();},60);
 }
 function toggleAutoScroll(){
     autoScrollEnabled = !autoScrollEnabled;
