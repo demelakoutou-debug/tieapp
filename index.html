@@ -703,6 +703,7 @@
             <div class="chart-toolbar-sep"></div>
             <button class="chart-tool-btn" id="btn-trendline" onclick="toggleTrendlineMode()" data-tip="Tracer une tendance">📈</button>
             <button class="chart-tool-btn" id="btn-trendline-clear" onclick="clearTrendlines()" data-tip="Effacer toutes les tendances">🗑</button>
+            <button class="chart-tool-btn" id="btn-export" onclick="exportTicksCSV()" data-tip="Exporter les ticks + indicateurs (CSV)">⬇</button>
         </div>
         <div id="ps-float-badge" class="std">🔴 STANDARD</div>
         <canvas id="cryptoChart"></canvas>
@@ -909,7 +910,7 @@ function celStepNewTick(price){
     if(celLongArr.length > 6000){ celLongArr.shift(); celShortArr.shift(); }
 }
 
-let ticksData = { times:[], prices:[], highs:[], lows:[] };
+let ticksData = { times:[], epochs:[], prices:[], highs:[], lows:[] };
 let showSAR=true, showFractal=true, showLevels=true, showST=true, showMA=false, showCEL=false, showAO=false;
 let autoScrollEnabled=true;
 let sessionHigh=null, sessionLow=null;
@@ -1916,6 +1917,7 @@ setInterval(()=>{ if(_serverEpoch>0) _renderServerTime(); }, 500);
 ════════════════════════════════════════════ */
 function processHistory(h){
     ticksData.times=h.times.map(formatTime);
+    ticksData.epochs=[...h.times];
     ticksData.prices=[...h.prices];
     ticksData.highs=[...h.prices];
     ticksData.lows=[...h.prices];
@@ -1934,10 +1936,10 @@ function processNewTick(tick){
     _lastTickEpoch = tick.epoch;
     const ft = formatTime(tick.epoch);
     const p  = parseFloat(tick.quote);
-    ticksData.times.push(ft); ticksData.prices.push(p);
+    ticksData.times.push(ft); ticksData.epochs.push(tick.epoch); ticksData.prices.push(p);
     ticksData.highs.push(p);  ticksData.lows.push(p);
     if(ticksData.prices.length > 6000){
-        ticksData.times.shift(); ticksData.prices.shift();
+        ticksData.times.shift(); ticksData.epochs.shift(); ticksData.prices.shift();
         ticksData.highs.shift(); ticksData.lows.shift();
     }
     if(sessionHigh===null||p>sessionHigh) sessionHigh=p;
@@ -2218,6 +2220,85 @@ function calculateFractals(prices,period){
         if(isD)down[i]=prices[i];
     }
     return{up,down};
+}
+
+/* ════════════════════════════════════════════
+   EXPORT CSV — tous les ticks en mémoire + leurs indicateurs
+   ─────────────────────────────────────────
+   Génère un fichier .csv consultable hors ligne (Excel, Google Sheets,
+   LibreOffice, applis tableur mobiles). Les indicateurs sont recalculés
+   sur TOUT l'historique en mémoire (jusqu'à 6000 ticks) avec les
+   paramètres actuellement affichés dans le panneau, pas seulement sur la
+   fenêtre glissante utilisée pour l'affichage live.
+   Format français : séparateur ";" et virgule décimale (ouverture directe
+   dans Excel FR). Passer CSV_DECIMAL_COMMA à false pour des points.
+════════════════════════════════════════════ */
+const CSV_DECIMAL_COMMA = true;
+function exportTicksCSV(){
+    const n = ticksData.prices.length;
+    if(!n){ showFeedback('⚠ Aucun tick à exporter pour le moment','err'); return; }
+
+    const sarStep = parseFloat(document.getElementById('sar-step').value)||0.02;
+    const sarMax  = parseFloat(document.getElementById('sar-max').value)||0.2;
+    const fracPer = parseInt(document.getElementById('fractal-period').value)||2;
+    const maPeriod= parseInt(document.getElementById('ma-period').value)||20;
+    const maType  = document.getElementById('ma-type').value||'sma';
+    const aoFast  = parseInt(document.getElementById('ao-fast').value)||5;
+    const aoSlow  = parseInt(document.getElementById('ao-slow').value)||34;
+
+    const sar = calculateSAR(ticksData.highs, ticksData.lows, sarStep, sarMax);
+    const fr  = calculateFractals(ticksData.prices, fracPer);
+    const ma  = maType==='ema' ? calculateEMA(ticksData.prices, maPeriod) : calculateSMA(ticksData.prices, maPeriod);
+    const ao  = calculateAO(ticksData.prices, aoFast, aoSlow);
+
+    const num = v => {
+        if(v==null || isNaN(v)) return '';
+        const t = String(+v.toFixed(6));
+        return CSV_DECIMAL_COMMA ? t.replace('.',',') : t;
+    };
+    const pad = x => String(x).padStart(2,'0');
+    const fmtDT = ep => {
+        const d = new Date(ep*1000);
+        return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+    };
+
+    const header = [
+        'Index','Epoch','Date_Heure_locale','Prix','Direction',
+        'SAR','Fractal_Haut','Fractal_Bas',
+        'SuperTrend_Haussier','SuperTrend_Baissier',
+        'MA_'+maType.toUpperCase()+'_'+maPeriod,
+        'CE_Long','CE_Short',
+        'AO_'+aoFast+'_'+aoSlow
+    ];
+    const lines = [header.join(';')];
+    for(let i=0;i<n;i++){
+        const p = ticksData.prices[i];
+        const prev = i>0 ? ticksData.prices[i-1] : null;
+        const dir = prev==null ? '' : (p>prev ? 'Hausse' : p<prev ? 'Baisse' : 'Egal');
+        const ep = ticksData.epochs[i];
+        lines.push([
+            i+1,
+            ep!=null ? ep : '',
+            ep!=null ? fmtDT(ep) : (ticksData.times[i]||''),
+            num(p), dir,
+            num(sar[i]), num(fr.up[i]), num(fr.down[i]),
+            num(stBullArr[i]), num(stBearArr[i]),
+            num(ma[i]),
+            num(celLongArr[i]), num(celShortArr[i]),
+            num(ao[i])
+        ].join(';'));
+    }
+
+    const csv = '\uFEFF' + lines.join('\r\n');
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const now = new Date();
+    const fname = 'tieapp_ticks_'+currentSymbol+'_'+now.getFullYear()+pad(now.getMonth()+1)+pad(now.getDate())+'_'+pad(now.getHours())+pad(now.getMinutes())+pad(now.getSeconds())+'.csv';
+    const a = document.createElement('a');
+    a.href = url; a.download = fname;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 5000);
+    showFeedback('✓ '+n+' ticks exportés → '+fname,'ok');
 }
 
 /* ════════════════════════════════════════════
@@ -2831,7 +2912,7 @@ document.getElementById('stake-input').addEventListener('change', updateDoubleLa
 
 document.getElementById('market-select').addEventListener('change',e=>{
     currentSymbol=e.target.value;
-    ticksData={times:[],prices:[],highs:[],lows:[]};
+    ticksData={times:[],epochs:[],prices:[],highs:[],lows:[]};
     sessionHigh=null; sessionLow=null;
     ['stat-high','stat-low'].forEach(id=>document.getElementById(id).innerText='—');
     document.getElementById('last-price').innerText='—';
