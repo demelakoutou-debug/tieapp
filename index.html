@@ -703,7 +703,7 @@
             <div class="chart-toolbar-sep"></div>
             <button class="chart-tool-btn" id="btn-trendline" onclick="toggleTrendlineMode()" data-tip="Tracer une tendance">📈</button>
             <button class="chart-tool-btn" id="btn-trendline-clear" onclick="clearTrendlines()" data-tip="Effacer toutes les tendances">🗑</button>
-            <button class="chart-tool-btn" id="btn-export" onclick="exportTicksCSV()" data-tip="Exporter les ticks + indicateurs (CSV)">⬇</button>
+            <button class="chart-tool-btn" id="btn-export" onclick="exportTicksHTML()" data-tip="Exporter graphique + indicateurs (fichier HTML hors ligne)">⬇</button>
         </div>
         <div id="ps-float-badge" class="std">🔴 STANDARD</div>
         <canvas id="cryptoChart"></canvas>
@@ -726,6 +726,357 @@
     </div>
     <div id="y-drag-zone"><span id="y-drag-hint">↕ SCALE</span></div>
 </div>
+
+<!-- Modèle de la visionneuse hors ligne (utilisé par exportTicksHTML) -->
+<script type="text/template" id="viewer-tpl">
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>TieAPP - Ticks hors ligne</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:Inter,system-ui,-apple-system,Arial,sans-serif;background:#0d0f17;color:#c8cdd8;display:flex;flex-direction:column;overflow:hidden;-webkit-user-select:none;user-select:none}
+#top{background:#141720;border-bottom:1px solid #252a3a;padding:8px 12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.title{font-family:monospace;font-weight:700;color:#3d7eff;font-size:13px}
+.meta{font-size:11px;color:#5a6480}
+.sp{flex:1}
+#tg{display:flex;flex-wrap:wrap;gap:6px}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:6px 10px;border-radius:6px;border:1px solid #2f3650;background:#1c2030;color:#8791ad;font-size:11px;font-weight:600;cursor:pointer}
+.btn.on{background:#3d7eff;border-color:#3d7eff;color:#fff}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+#wrap{flex:1;position:relative;min-height:0}
+#cv{position:absolute;left:0;top:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
+#info{display:none;position:absolute;top:8px;font-family:monospace;font-size:11px;line-height:1.55;background:rgba(20,23,32,.94);border:1px solid #2f3650;border-radius:8px;padding:8px 10px;pointer-events:none}
+#bar{background:#141720;border-top:1px solid #252a3a;padding:8px 12px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+#sl{flex:1;min-width:140px}
+.hint{font-size:10px;color:#5a6480;width:100%}
+</style>
+</head>
+<body>
+<div id="top">
+  <span class="title">TieAPP &middot; <span id="sym"></span></span>
+  <span class="meta" id="meta"></span>
+  <span class="sp"></span>
+  <span id="tg"></span>
+</div>
+<div id="wrap"><canvas id="cv"></canvas><div id="info"></div></div>
+<div id="bar">
+  <button class="btn" id="b-start">&#9198; D&eacute;but</button>
+  <button class="btn" id="b-left">&#9664;</button>
+  <button class="btn" id="b-right">&#9654;</button>
+  <button class="btn" id="b-end">Fin &#9197;</button>
+  <button class="btn" id="b-zout">&minus;</button>
+  <button class="btn" id="b-zin">+</button>
+  <button class="btn" id="b-all">Tout</button>
+  <input type="range" id="sl" min="0" max="1000" value="1000">
+  <div class="hint">Glisser = d&eacute;filer &bull; Molette ou pincer = zoom &bull; Clic / tap = valeurs du tick &bull; Double-clic = revenir &agrave; la fin &bull; Fl&egrave;ches du clavier = d&eacute;filer</div>
+</div>
+<script>
+(function(){
+var D = /*__DATA__*/null;
+var N = D.prices.length;
+function $(id){return document.getElementById(id);}
+var cv=$('cv'), ctx=cv.getContext('2d'), wrap=$('wrap'), info=$('info');
+var W=0,H=0,DPR=Math.min(window.devicePixelRatio||1,3);
+var PADL=8,PADR=66,PADT=14,PADB=26;
+var vis={sar:!!D.flags.sar,fr:!!D.flags.fr,st:!!D.flags.st,ma:!!D.flags.ma,ce:!!D.flags.ce,ao:!!D.flags.ao};
+var view={s:0,e:1};
+var hover=null,raf=0;
+var LO=-10,HI=N+10;
+
+function p2(x){return (x<10?'0':'')+x;}
+function fT(ep){if(ep==null)return '--:--:--';var d=new Date(ep*1000);return p2(d.getHours())+':'+p2(d.getMinutes())+':'+p2(d.getSeconds());}
+function fD(ep){if(ep==null)return '----/--/--';var d=new Date(ep*1000);return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate());}
+function fv(v,d){return (v==null)?'-':v.toFixed(d==null?2:d);}
+function niceStep(raw){if(!(raw>0))return 1;var p=Math.pow(10,Math.floor(Math.log(raw)/Math.LN10));var f=raw/p;var n=f<1.5?1:(f<3?2:(f<7?5:10));return n*p;}
+
+/* Echelle fixe de l'AO : 99e percentile de tout l'historique exporte,
+   pour que les barres restent comparables d'un endroit a l'autre. */
+var aoRef=(function(){var a=[];for(var i=0;i<N;i++){if(D.ao[i]!=null)a.push(Math.abs(D.ao[i]));}if(!a.length)return 1;a.sort(function(x,y){return x-y;});return a[Math.min(a.length-1,Math.floor(a.length*0.99))]||a[a.length-1]||1;})();
+
+$('sym').textContent=D.symbol;
+$('meta').textContent=N+' ticks'+(N?(' \u00b7 '+fD(D.epochs[0])+' '+fT(D.epochs[0])+' \u2192 '+fD(D.epochs[N-1])+' '+fT(D.epochs[N-1])):'')+' \u00b7 '+D.paramsText+" \u00b7 heure locale de l'appareil";
+
+var items=[['sar','SAR','#ffaa40'],['fr','Fractal','#b47aff'],['st','SuperTrend','#ffc800'],['ma','MA','#4dd0e1'],['ce','CE','#f472b6'],['ao','AO','#ff6d4a']];
+items.forEach(function(it){
+  var b=document.createElement('button');
+  b.className='btn'+(vis[it[0]]?' on':'');
+  b.innerHTML='<span class="dot" style="background:'+it[2]+'"></span>'+it[1];
+  b.onclick=function(){vis[it[0]]=!vis[it[0]];b.className='btn'+(vis[it[0]]?' on':'');render();};
+  $('tg').appendChild(b);
+});
+
+function clamp(){
+  var span=Math.max(10,Math.min(view.e-view.s,HI-LO));
+  var s=Math.max(LO,Math.min(view.s,HI-span));
+  view.s=s;view.e=s+span;
+}
+function goEnd(span){span=span||220;view.e=N-1+8;view.s=view.e-span;clamp();}
+function sync(){var sp=view.e-view.s;var rng=HI-LO-sp;$('sl').value=rng>0?Math.round((view.s-LO)/rng*1000):0;}
+function render(){if(raf)return;raf=requestAnimationFrame(function(){raf=0;draw();});}
+function fit(){
+  W=wrap.clientWidth;H=wrap.clientHeight;
+  cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  render();
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#0d0f17';ctx.fillRect(0,0,W,H);
+  if(N<2){ctx.fillStyle='#5a6480';ctx.font='14px sans-serif';ctx.fillText('Aucun tick dans ce fichier',20,40);return;}
+  var plotW=W-PADL-PADR, span=view.e-view.s;
+  var bottomY=H-PADB;
+  var aoH=vis.ao?Math.round((bottomY-PADT)*0.26):0, gap=vis.ao?10:0;
+  var pTop=PADT, pBot=bottomY-aoH-gap, aoTop=pBot+gap;
+  function X(i){return PADL+(i-view.s)/span*plotW;}
+  var i0=Math.max(0,Math.floor(view.s)), i1=Math.min(N-1,Math.ceil(view.e));
+  var mn=Infinity,mx=-Infinity,i,p;
+  for(i=i0;i<=i1;i++){p=D.prices[i];if(p<mn)mn=p;if(p>mx)mx=p;}
+  if(!isFinite(mn)){mn=0;mx=1;}
+  if(mx-mn<1e-9)mx=mn+1;
+  var pd=(mx-mn)*0.08;mn-=pd;mx+=pd;
+  function Y(v){return pTop+(mx-v)/(mx-mn)*(pBot-pTop);}
+
+  /* grille horizontale + etiquettes de prix */
+  ctx.lineWidth=1;ctx.font='10px monospace';
+  var step=niceStep((mx-mn)/6);
+  var dec=Math.max(0,Math.min(4,Math.ceil(-Math.log(step)/Math.LN10-1e-9)));
+  ctx.textAlign='left';ctx.textBaseline='middle';
+  var guard=0;
+  for(var v=Math.ceil(mn/step)*step;v<=mx&&guard<60;v+=step,guard++){
+    var gy=Y(v);
+    ctx.strokeStyle='rgba(37,42,58,.9)';ctx.beginPath();ctx.moveTo(PADL,gy);ctx.lineTo(W-PADR,gy);ctx.stroke();
+    ctx.fillStyle='#5a6480';ctx.fillText(v.toFixed(dec),W-PADR+6,gy);
+  }
+  /* grille verticale + heures */
+  var cnt=Math.max(2,Math.floor(plotW/100));
+  var vs=Math.max(1,Math.ceil(niceStep(span/cnt)));
+  ctx.textAlign='center';ctx.textBaseline='alphabetic';
+  var lastDay='';
+  for(var k=Math.ceil(view.s/vs)*vs;k<=view.e;k+=vs){
+    if(k<0||k>N-1)continue;
+    var gx=X(k);
+    ctx.strokeStyle='rgba(37,42,58,.9)';ctx.beginPath();ctx.moveTo(gx,PADT);ctx.lineTo(gx,bottomY);ctx.stroke();
+    var ep=D.epochs[k];
+    ctx.fillStyle='#5a6480';ctx.font='10px monospace';ctx.fillText(fT(ep),gx,H-5);
+    var dd=fD(ep);
+    if(dd!==lastDay){ctx.font='9px monospace';ctx.fillText(dd,gx,H-15);lastDay=dd;}
+  }
+
+  var pxPer=plotW/span;
+  var stride=Math.max(1,Math.floor(1.2/pxPer));
+  var a=Math.max(0,i0-1), b=Math.min(N-1,i1+1);
+
+  function line(arr,color,w,dash){
+    ctx.strokeStyle=color;ctx.lineWidth=w;ctx.setLineDash(dash||[]);
+    ctx.beginPath();var pen=false;
+    for(var j=a;j<=b;j+=stride){
+      var vv=arr[j];
+      if(vv==null){pen=false;continue;}
+      var lx=X(j),ly=Y(vv);
+      if(pen)ctx.lineTo(lx,ly);else{ctx.moveTo(lx,ly);pen=true;}
+    }
+    ctx.stroke();ctx.setLineDash([]);
+  }
+
+  /* ---- zone prix (clippee) ---- */
+  ctx.save();ctx.beginPath();ctx.rect(PADL,pTop,plotW,pBot-pTop);ctx.clip();
+  if(vis.ma)line(D.ma,'#4dd0e1',1.6);
+  if(vis.ce){line(D.ceLong,'#2dd4bf',2,[5,3]);line(D.ceShort,'#f472b6',2,[5,3]);}
+  if(vis.st){line(D.stBull,'#00c896',2.4);line(D.stBear,'#ff4d6a',2.4);}
+
+  ctx.strokeStyle='#3d7eff';ctx.lineWidth=1.6;ctx.setLineDash([]);ctx.beginPath();
+  if(pxPer>=1){
+    for(i=a;i<=b;i++){var px=X(i),py=Y(D.prices[i]);if(i===a)ctx.moveTo(px,py);else ctx.lineTo(px,py);}
+  }else{
+    /* beaucoup de ticks par pixel : on trace min/max par colonne pour ne perdre aucun pic */
+    var lastCol=-1e9,cmn=0,cmx=0,lastP=D.prices[a],started=false;
+    var pt=function(x,val){var yy=Y(val);if(!started){ctx.moveTo(x,yy);started=true;}else ctx.lineTo(x,yy);};
+    var flush=function(){
+      var x=lastCol+0.5;
+      if(Math.abs(lastP-cmn)<=Math.abs(lastP-cmx)){pt(x,cmn);pt(x,cmx);lastP=cmx;}
+      else{pt(x,cmx);pt(x,cmn);lastP=cmn;}
+    };
+    for(i=a;i<=b;i++){
+      var col=Math.floor(X(i)),pv=D.prices[i];
+      if(col!==lastCol){if(lastCol>-1e9)flush();lastCol=col;cmn=pv;cmx=pv;}
+      else{if(pv<cmn)cmn=pv;if(pv>cmx)cmx=pv;}
+    }
+    if(lastCol>-1e9)flush();
+  }
+  ctx.stroke();
+
+  if(vis.sar){
+    ctx.fillStyle='#ffaa40';
+    for(i=a;i<=b;i+=stride){var sv=D.sar[i];if(sv==null)continue;ctx.beginPath();ctx.arc(X(i),Y(sv),2,0,6.2832);ctx.fill();}
+  }
+  if(vis.fr&&pxPer>=0.5){
+    for(i=a;i<=b;i++){
+      var fu=D.frUp[i],fd=D.frDn[i],fx;
+      if(fu!=null){fx=X(i);var fy=Y(fu)-6;ctx.fillStyle='#00c896';ctx.beginPath();ctx.moveTo(fx,fy-5);ctx.lineTo(fx-5,fy+4);ctx.lineTo(fx+5,fy+4);ctx.closePath();ctx.fill();}
+      if(fd!=null){fx=X(i);var fy2=Y(fd)+6;ctx.fillStyle='#ff4d6a';ctx.beginPath();ctx.moveTo(fx,fy2+5);ctx.lineTo(fx-5,fy2-4);ctx.lineTo(fx+5,fy2-4);ctx.closePath();ctx.fill();}
+    }
+  }
+  var lastY=null;
+  if(i1===N-1){
+    lastY=Y(D.prices[N-1]);
+    ctx.strokeStyle='rgba(61,126,255,.7)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(PADL,lastY);ctx.lineTo(W-PADR,lastY);ctx.stroke();
+  }
+  ctx.restore();
+  if(lastY!=null){
+    var lbl=D.prices[N-1].toFixed(dec>0?dec:1);
+    ctx.fillStyle='#3d7eff';ctx.fillRect(W-PADR+2,lastY-8,PADR-4,16);
+    ctx.fillStyle='#fff';ctx.font='bold 10px monospace';ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText(lbl,W-PADR+6,lastY);
+  }
+
+  /* ---- panneau AO (separe, sous le mur) ---- */
+  if(vis.ao){
+    var wy=pBot+gap/2;
+    ctx.strokeStyle='rgba(90,100,128,.7)';ctx.lineWidth=1;ctx.setLineDash([5,4]);
+    ctx.beginPath();ctx.moveTo(PADL,wy);ctx.lineTo(W-PADR,wy);ctx.stroke();ctx.setLineDash([]);
+    ctx.save();ctx.beginPath();ctx.rect(PADL,aoTop,plotW,bottomY-aoTop);ctx.clip();
+    var mid=(aoTop+bottomY)/2, half=(bottomY-aoTop)/2;
+    ctx.strokeStyle='rgba(90,100,128,.5)';ctx.beginPath();ctx.moveTo(PADL,mid);ctx.lineTo(W-PADR,mid);ctx.stroke();
+    var bw=Math.max(1,pxPer*stride*0.75);
+    for(i=a;i<=b;i+=stride){
+      var av=D.ao[i];if(av==null)continue;
+      var ap=i>0?D.ao[i-1]:null;
+      var rising=(ap==null)?(av>=0):(av>=ap);
+      ctx.fillStyle=rising?'rgba(0,200,150,.85)':'rgba(255,77,106,.85)';
+      var bh=Math.min(half,Math.abs(av)/aoRef*half),bx=X(i)-bw/2;
+      if(av>=0)ctx.fillRect(bx,mid-bh,bw,bh);else ctx.fillRect(bx,mid,bw,bh);
+    }
+    ctx.restore();
+    ctx.fillStyle='#ff6d4a';ctx.font='bold 9px monospace';ctx.textAlign='left';ctx.textBaseline='top';
+    ctx.fillText('AO '+D.aoFast+'/'+D.aoSlow,PADL+4,aoTop+3);
+  }
+
+  /* ---- reticule + valeurs ---- */
+  if(hover!=null&&hover>=0&&hover<N){
+    var hx=X(hover),hy=Y(D.prices[hover]);
+    ctx.strokeStyle='rgba(200,205,216,.35)';ctx.lineWidth=1;ctx.setLineDash([4,3]);
+    ctx.beginPath();ctx.moveTo(hx,PADT);ctx.lineTo(hx,bottomY);ctx.moveTo(PADL,hy);ctx.lineTo(W-PADR,hy);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle='#3d7eff';ctx.beginPath();ctx.arc(hx,hy,3.5,0,6.2832);ctx.fill();
+    updateInfo(hover,hx);
+  }else{info.style.display='none';}
+  sync();
+}
+
+function updateInfo(i,hx){
+  var ep=D.epochs[i],pv=i>0?D.prices[i-1]:null,p=D.prices[i];
+  var h='<b>#'+(i+1)+'</b> \u00b7 '+fD(ep)+' '+fT(ep)+'<br>Prix <b>'+fv(p)+'</b>';
+  if(pv!=null){var dl=p-pv;h+=' <span style="color:'+(dl>0?'#00c896':(dl<0?'#ff4d6a':'#5a6480'))+'">'+(dl>0?'\u25b2 +':(dl<0?'\u25bc ':'= '))+(dl===0?'0':fv(dl))+'</span>';}
+  function row(lbl,col,v,d){if(v==null)return '';return '<br><span style="color:'+col+'">'+lbl+'</span> '+fv(v,d);}
+  if(vis.sar)h+=row('SAR','#ffaa40',D.sar[i]);
+  if(vis.fr){h+=row('Fractal \u25b2','#00c896',D.frUp[i]);h+=row('Fractal \u25bc','#ff4d6a',D.frDn[i]);}
+  if(vis.st){h+=row('ST haussier','#00c896',D.stBull[i]);h+=row('ST baissier','#ff4d6a',D.stBear[i]);}
+  if(vis.ma)h+=row('MA','#4dd0e1',D.ma[i]);
+  if(vis.ce){h+=row('CE long','#2dd4bf',D.ceLong[i]);h+=row('CE short','#f472b6',D.ceShort[i]);}
+  if(vis.ao)h+=row('AO','#ff6d4a',D.ao[i],4);
+  info.innerHTML=h;info.style.display='block';
+  if(hx<W/2){info.style.left='auto';info.style.right=(PADR+8)+'px';}else{info.style.right='auto';info.style.left='8px';}
+}
+
+/* ---- interactions ---- */
+function plotWidth(){return W-PADL-PADR;}
+function idxAt(clientX,s,e){var r=cv.getBoundingClientRect();return s+(clientX-r.left-PADL)/plotWidth()*(e-s);}
+function zoomAt(bs,be,factor,anchor){
+  var ns=(be-bs)*factor,ratio=(anchor-bs)/(be-bs);
+  view.s=anchor-ratio*ns;view.e=view.s+ns;clamp();
+}
+function setHover(clientX){
+  var r=cv.getBoundingClientRect(),x=clientX-r.left;
+  if(x<PADL||x>W-PADR){hover=null;}
+  else{var idx=Math.round(view.s+(x-PADL)/plotWidth()*(view.e-view.s));hover=(idx<0||idx>N-1)?null:idx;}
+  render();
+}
+var ptrs={},drag=null,pinch=null,moved=0;
+cv.addEventListener('pointerdown',function(e){
+  try{cv.setPointerCapture(e.pointerId);}catch(err){}
+  ptrs[e.pointerId]={x:e.clientX,y:e.clientY,t:e.pointerType};
+  var ids=Object.keys(ptrs);
+  if(ids.length===1){drag={x:e.clientX,s:view.s,e:view.e};moved=0;}
+  else if(ids.length===2){
+    var p1=ptrs[ids[0]],p2_=ptrs[ids[1]];
+    pinch={d:Math.max(1,Math.hypot(p1.x-p2_.x,p1.y-p2_.y)),s:view.s,e:view.e,cx:(p1.x+p2_.x)/2};
+    drag=null;
+  }
+});
+cv.addEventListener('pointermove',function(e){
+  var pp=ptrs[e.pointerId];
+  if(pp){pp.x=e.clientX;pp.y=e.clientY;}
+  var ids=Object.keys(ptrs);
+  if(ids.length>=2&&pinch){
+    var p1=ptrs[ids[0]],p2_=ptrs[ids[1]];
+    var d=Math.max(1,Math.hypot(p1.x-p2_.x,p1.y-p2_.y));
+    zoomAt(pinch.s,pinch.e,pinch.d/d,idxAt(pinch.cx,pinch.s,pinch.e));
+    moved=99;hover=null;render();
+  }else if(drag&&ids.length===1){
+    var dx=e.clientX-drag.x;moved=Math.max(moved,Math.abs(dx));
+    var sp=drag.e-drag.s,di=-dx/plotWidth()*sp;
+    view.s=drag.s+di;view.e=drag.e+di;clamp();
+    if(moved>4)hover=null;
+    render();
+  }else if(e.pointerType==='mouse'){setHover(e.clientX);}
+});
+function endPtr(e){
+  var wasTap=(moved<5)&&Object.keys(ptrs).length===1;
+  delete ptrs[e.pointerId];
+  var ids=Object.keys(ptrs);
+  pinch=null;
+  if(ids.length===1){var q=ptrs[ids[0]];drag={x:q.x,s:view.s,e:view.e};moved=99;}
+  else{drag=null;}
+  if(wasTap)setHover(e.clientX);
+}
+cv.addEventListener('pointerup',endPtr);
+cv.addEventListener('pointercancel',endPtr);
+cv.addEventListener('mouseleave',function(){if(!drag){hover=null;render();}});
+cv.addEventListener('wheel',function(e){
+  e.preventDefault();
+  if(Math.abs(e.deltaX)>Math.abs(e.deltaY)){
+    var sp=view.e-view.s,di=e.deltaX/plotWidth()*sp;view.s+=di;view.e+=di;clamp();
+  }else{
+    zoomAt(view.s,view.e,Math.exp(e.deltaY*0.0015),idxAt(e.clientX,view.s,view.e));
+  }
+  render();
+},{passive:false});
+cv.addEventListener('dblclick',function(){goEnd(220);render();});
+
+function pan(frac){var sp=view.e-view.s;view.s+=sp*frac;view.e=view.s+sp;clamp();render();}
+function zoom(f){var c=(view.s+view.e)/2,ns=(view.e-view.s)*f;view.s=c-ns/2;view.e=c+ns/2;clamp();render();}
+$('b-start').onclick=function(){var sp=view.e-view.s;view.s=LO;view.e=LO+sp;clamp();render();};
+$('b-end').onclick=function(){goEnd(view.e-view.s);render();};
+$('b-left').onclick=function(){pan(-0.25);};
+$('b-right').onclick=function(){pan(0.25);};
+$('b-zout').onclick=function(){zoom(1.6);};
+$('b-zin').onclick=function(){zoom(1/1.6);};
+$('b-all').onclick=function(){view.s=-5;view.e=N+5;clamp();render();};
+$('sl').addEventListener('input',function(){
+  var sp=view.e-view.s,rng=HI-LO-sp;
+  view.s=LO+(this.value/1000)*rng;view.e=view.s+sp;hover=null;render();
+});
+window.addEventListener('keydown',function(e){
+  if(e.key==='ArrowLeft'){pan(-0.1);}
+  else if(e.key==='ArrowRight'){pan(0.1);}
+  else if(e.key==='+'||e.key==='='){zoom(1/1.3);}
+  else if(e.key==='-'){zoom(1.3);}
+  else if(e.key==='Home'){$('b-start').onclick();}
+  else if(e.key==='End'){$('b-end').onclick();}
+});
+window.addEventListener('resize',fit);
+window.addEventListener('orientationchange',function(){setTimeout(fit,200);});
+
+goEnd(220);
+fit();
+})();
+__END_SCRIPT__
+</body>
+</html>
+</script>
 
 <script>
 /* ════════════════════════════════════════════
@@ -2223,20 +2574,23 @@ function calculateFractals(prices,period){
 }
 
 /* ════════════════════════════════════════════
-   EXPORT CSV — tous les ticks en mémoire + leurs indicateurs
+   EXPORT HORS LIGNE — graphique + indicateurs dans UN fichier HTML
    ─────────────────────────────────────────
-   Génère un fichier .csv consultable hors ligne (Excel, Google Sheets,
-   LibreOffice, applis tableur mobiles). Les indicateurs sont recalculés
-   sur TOUT l'historique en mémoire (jusqu'à 6000 ticks) avec les
-   paramètres actuellement affichés dans le panneau, pas seulement sur la
-   fenêtre glissante utilisée pour l'affichage live.
-   Format français : séparateur ";" et virgule décimale (ouverture directe
-   dans Excel FR). Passer CSV_DECIMAL_COMMA à false pour des points.
+   Génère un fichier .html autonome (aucune dépendance externe, ni
+   librairie ni internet) contenant tous les ticks en mémoire (jusqu'à
+   6000) et leurs indicateurs, avec une visionneuse de graphique
+   défilable/zoomable (souris, clavier, tactile). Il s'ouvre par simple
+   double-clic dans n'importe quel navigateur, même sans connexion.
+   Les indicateurs sont recalculés sur TOUT l'historique en mémoire avec
+   les paramètres actuellement affichés dans le panneau. Le code de la
+   visionneuse vient du bloc modèle (id viewer-tpl, type text/template)
+   placé juste avant le script principal de cette page.
 ════════════════════════════════════════════ */
-const CSV_DECIMAL_COMMA = true;
-function exportTicksCSV(){
+function exportTicksHTML(){
     const n = ticksData.prices.length;
     if(!n){ showFeedback('⚠ Aucun tick à exporter pour le moment','err'); return; }
+    const tplEl = document.getElementById('viewer-tpl');
+    if(!tplEl){ showFeedback('❌ Modèle de visionneuse introuvable','err'); return; }
 
     const sarStep = parseFloat(document.getElementById('sar-step').value)||0.02;
     const sarMax  = parseFloat(document.getElementById('sar-max').value)||0.2;
@@ -2245,60 +2599,48 @@ function exportTicksCSV(){
     const maType  = document.getElementById('ma-type').value||'sma';
     const aoFast  = parseInt(document.getElementById('ao-fast').value)||5;
     const aoSlow  = parseInt(document.getElementById('ao-slow').value)||34;
+    const st = getSTParams(), ce = getCELParams();
 
     const sar = calculateSAR(ticksData.highs, ticksData.lows, sarStep, sarMax);
     const fr  = calculateFractals(ticksData.prices, fracPer);
     const ma  = maType==='ema' ? calculateEMA(ticksData.prices, maPeriod) : calculateSMA(ticksData.prices, maPeriod);
     const ao  = calculateAO(ticksData.prices, aoFast, aoSlow);
 
-    const num = v => {
-        if(v==null || isNaN(v)) return '';
-        const t = String(+v.toFixed(6));
-        return CSV_DECIMAL_COMMA ? t.replace('.',',') : t;
-    };
-    const pad = x => String(x).padStart(2,'0');
-    const fmtDT = ep => {
-        const d = new Date(ep*1000);
-        return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+    const r = (v,d) => (v==null || isNaN(v)) ? null : +(+v).toFixed(d);
+    const map = (arr,d) => { const o = new Array(n); for(let i=0;i<n;i++) o[i] = r(arr[i],d); return o; };
+    const epochs = new Array(n);
+    for(let i=0;i<n;i++) epochs[i] = ticksData.epochs[i] != null ? ticksData.epochs[i] : null;
+
+    const data = {
+        symbol: currentSymbol,
+        exportedAt: Date.now(),
+        epochs,
+        prices: map(ticksData.prices,4),
+        sar: map(sar,4),
+        frUp: map(fr.up,4), frDn: map(fr.down,4),
+        stBull: map(stBullArr,4), stBear: map(stBearArr,4),
+        ma: map(ma,4),
+        ceLong: map(celLongArr,4), ceShort: map(celShortArr,4),
+        ao: map(ao,5),
+        aoFast, aoSlow,
+        flags: { sar:showSAR, fr:showFractal, st:showST, ma:showMA, ce:showCEL, ao:showAO },
+        paramsText: 'SAR '+sarStep+'/'+sarMax+' · Fractal '+fracPer+' · ST '+st.period+'×'+st.mult
+                  + ' · '+maType.toUpperCase()+' '+maPeriod+' · CE '+ce.period+'×'+ce.mult+' · AO '+aoFast+'/'+aoSlow
     };
 
-    const header = [
-        'Index','Epoch','Date_Heure_locale','Prix','Direction',
-        'SAR','Fractal_Haut','Fractal_Bas',
-        'SuperTrend_Haussier','SuperTrend_Baissier',
-        'MA_'+maType.toUpperCase()+'_'+maPeriod,
-        'CE_Long','CE_Short',
-        'AO_'+aoFast+'_'+aoSlow
-    ];
-    const lines = [header.join(';')];
-    for(let i=0;i<n;i++){
-        const p = ticksData.prices[i];
-        const prev = i>0 ? ticksData.prices[i-1] : null;
-        const dir = prev==null ? '' : (p>prev ? 'Hausse' : p<prev ? 'Baisse' : 'Egal');
-        const ep = ticksData.epochs[i];
-        lines.push([
-            i+1,
-            ep!=null ? ep : '',
-            ep!=null ? fmtDT(ep) : (ticksData.times[i]||''),
-            num(p), dir,
-            num(sar[i]), num(fr.up[i]), num(fr.down[i]),
-            num(stBullArr[i]), num(stBearArr[i]),
-            num(ma[i]),
-            num(celLongArr[i]), num(celShortArr[i]),
-            num(ao[i])
-        ].join(';'));
-    }
+    const tpl = tplEl.textContent.trim().split('__END_SCRIPT__').join('</scr'+'ipt>');
+    const html = tpl.replace('/*__DATA__*/null', () => JSON.stringify(data));
 
-    const csv = '\uFEFF' + lines.join('\r\n');
-    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+    const blob = new Blob([html], {type:'text/html;charset=utf-8;'});
     const url = URL.createObjectURL(blob);
+    const pad = x => String(x).padStart(2,'0');
     const now = new Date();
-    const fname = 'tieapp_ticks_'+currentSymbol+'_'+now.getFullYear()+pad(now.getMonth()+1)+pad(now.getDate())+'_'+pad(now.getHours())+pad(now.getMinutes())+pad(now.getSeconds())+'.csv';
+    const fname = 'tieapp_ticks_'+currentSymbol+'_'+now.getFullYear()+pad(now.getMonth()+1)+pad(now.getDate())+'_'+pad(now.getHours())+pad(now.getMinutes())+pad(now.getSeconds())+'.html';
     const a = document.createElement('a');
     a.href = url; a.download = fname;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(()=>URL.revokeObjectURL(url), 5000);
-    showFeedback('✓ '+n+' ticks exportés → '+fname,'ok');
+    showFeedback('✓ '+n+' ticks exportés ('+Math.round(blob.size/1024)+' Ko) → '+fname,'ok');
 }
 
 /* ════════════════════════════════════════════
